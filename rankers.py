@@ -76,7 +76,7 @@ def l1_regression_ranking(X, y):
     X_scaled = scaler.fit_transform(X)
     step_a = find_alpha_step(X_scaled, y)
     last_coef = np.ones(X.shape[1])
-    ranking = pd.DataFrame(columns=['Feature', 'Score'])
+    ranking = pd.DataFrame(columns=['L1', 'Score'])
     dropped_features = set()
     alpha = step_a
     max_iter = 0
@@ -87,10 +87,10 @@ def l1_regression_ranking(X, y):
         coef = las.coef_
         just_zeroed = (last_coef != 0) & (coef == 0)
         zeroed_features = X.columns[just_zeroed].tolist()
-        new_rankings = pd.DataFrame({'Feature': zeroed_features, 'Score': [alpha] * len(zeroed_features)})
+        new_rankings = pd.DataFrame({'L1': zeroed_features, 'Score': [alpha] * len(zeroed_features)})
         for feature in zeroed_features:
             if feature not in dropped_features:
-                ranking = pd.concat([ranking, new_rankings[new_rankings['Feature'] == feature]], ignore_index=True)
+                ranking = pd.concat([ranking, new_rankings[new_rankings['L1'] == feature]], ignore_index=True)
                 dropped_features.add(feature)
         last_coef = coef
         alpha += step_a
