@@ -75,10 +75,15 @@ def sanitize_column_names(df): # remove typical unwanted characters from column 
 
 
 def view_data(df):
+    count = 0
     for column in df.columns:
         nan_count = df[column].isna().sum()
         nan_percentage = round(nan_count / len(df) * 100, 1)
-        print(f'The column {column} has {nan_percentage}% NaN values.')
+        if nan_percentage > 0:
+            count += 1
+            print(f'The column {column} has {nan_percentage}% NaN values.')
+    if count == 0:
+        print('There are no NaN values in the dataset')
 
 
 def get_data(df, labels, thresh=0.8, columns_to_drop=None):
@@ -102,11 +107,13 @@ def spearman_scoring_function(y_true, y_pred):
     return spearmanr(y_true, y_pred)[0]
 
 
-def regression_hyper_param_search(X, y, cv, num_runs, model_params=model_params):
+def regression_hyper_param_search(X, y, cv, num_runs, model_params=model_params, save=False):
     spearman_scorer = make_scorer(spearman_scoring_function, greater_is_better=True)
     total_hypers = []
+    best_predictions = None
+    best_labels = None
+
     for model_name, mp in model_params['regression'].items():
-        # Initialize the RandomizedSearchCV object
         clf = RandomizedSearchCV(mp['model'],
                                  mp['params'],
                                  n_iter=num_runs,
@@ -116,12 +123,13 @@ def regression_hyper_param_search(X, y, cv, num_runs, model_params=model_params)
                                  verbose=2,
                                  n_jobs=-1)
         clf.fit(X, y)
-        print(f'Best spearmn for {model_name}: {clf.best_score_}')
+        predictions = cross_val_predict(clf.best_estimator_, X, y, cv=cv)
+        plot_correlations(predictions, y, model_name, save=save)
         total_hypers.append({'model': model_name, 'best_score': clf.best_score_, 'best_params': clf.best_params_})
     return total_hypers
 
 
-def classification_hyper_param_search(X, y, cv, num_runs, model_params=model_params):
+def classification_hyper_param_search(X, y, cv, num_runs, model_params=model_params, save=False):
     total_hypers = []
     for model_name, mp in model_params['classification'].items():
         # Initialize the RandomizedSearchCV object
@@ -136,8 +144,8 @@ def classification_hyper_param_search(X, y, cv, num_runs, model_params=model_par
         predictions = cross_val_predict(clf.best_estimator_, X, y, cv=cv, n_jobs=-1)
         acc = accuracy_score(y, predictions)
         cm = confusion_matrix(y, predictions)
-        plot_confusion_matrix(cm, title=f'{model_name}_{round(acc, 3)}', labels=np.unique(y))
-    total_hypers.append({'model': model_name, 'best_score': clf.best_score_, 'best_params': clf.best_params_})
+        plot_confusion_matrix(cm, title=f'Confusion matrix for {model_name} with {round(acc, 3)} accuracy', labels=np.unique(y), save=save)
+        total_hypers.append({'model': model_name, 'best_score': clf.best_score_, 'best_params': clf.best_params_})
     return total_hypers
 
 

@@ -17,7 +17,7 @@ def find_alpha_step(X, y, alpha_iter=100, init_step=1e-20):
     pbar = tqdm(total=30, desc='Finding Alpha Step')
     while coef_count > 0 and total_iter < 1000000:
         alpha = step_a
-        lasso = Lasso(alpha=alpha*alpha_iter, max_iter=1000)
+        lasso = Lasso(alpha=alpha*alpha_iter, max_iter=10000)
         lasso.fit(X, y)
         alpha += step_a
         coef_count = np.count_nonzero(lasso.coef_)
@@ -25,7 +25,7 @@ def find_alpha_step(X, y, alpha_iter=100, init_step=1e-20):
             step_a = step_a * 10
             total_iter += 1
             pbar.update(1)
-    return step_a / 1000
+    return step_a / 100
 
 
 def find_c_step(X, y, init_step=1e20):
@@ -33,14 +33,14 @@ def find_c_step(X, y, init_step=1e20):
     pbar = tqdm(total=30, desc='Finding C Step')
     while coef_count > 0 and total_iter < 1000000:
         c = step_c
-        log = LogisticRegression(penalty='l1', C=c, solver='liblinear')
+        log = LogisticRegression(penalty='l1', C=c, solver='liblinear', max_iter=1000)
         log.fit(X, y)
         coef_count = np.count_nonzero(log.coef_)
         if coef_count > 0:
             step_c = step_c / 10
             total_iter += 1
             pbar.update(1)
-    return step_c / 10, step_c * 1000
+    return step_c / 10, step_c * 100
 
 
 def l1_classification_ranking(X, y):
@@ -52,11 +52,11 @@ def l1_classification_ranking(X, y):
     dropped_features = set()
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    pbar = tqdm(total=10000, desc='Ranking l1 Classification') # 10000 because that is initial C / step_c
+    pbar = tqdm(total=1000, desc='Ranking l1 Classification') # 1000 because that is initial C / step_c
     while np.any(last_coef != 0) and C > 0:
-        log_reg = LogisticRegression(penalty='l1', C=C, solver='liblinear', random_state=42)
+        log_reg = LogisticRegression(penalty='l1', C=C, solver='liblinear', random_state=42, max_iter=1000)
         log_reg.fit(X_scaled, y)
-        coef = log_reg.coef_.flatten()
+        coef = np.mean(log_reg.coef_, axis=0) # because OvR approach
         just_zeroed = (last_coef != 0) & (coef == 0)
         zeroed_features = X.columns[just_zeroed].tolist()
         new_rankings = pd.DataFrame({'L1': zeroed_features, 'Score': [C] * len(zeroed_features)})
@@ -80,7 +80,7 @@ def l1_regression_ranking(X, y):
     dropped_features = set()
     alpha = step_a
     max_iter = 0
-    pbar = tqdm(total=10000, desc='Ranking l1 Regression')
+    pbar = tqdm(total=10000, desc='Ranking l1 Regression') # 
     while np.any(last_coef != 0) and max_iter < 1000000:
         las = Lasso(alpha=alpha, max_iter=10000)
         las.fit(X_scaled, y)
