@@ -8,7 +8,7 @@ from xgboost import XGBClassifier, XGBRegressor
 from scipy.stats import spearmanr
 from sklearn.metrics import make_scorer
 
-from plots import *
+from .plots import *
 
 
 model_params = {

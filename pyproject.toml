@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "featureranker"
+version = "1.0.0"
+description = "Feature ranking ensemble"
+authors = ["Logan Hallee <lhallee@udel.edu>"]
+keywords = ["feature, ranker, sklearn"]
+repository = "https://github.com/lhallee/feature-ranker"
+license = "CC-BY-NC-SA-4.0"
+readme = "README.md"
+include = [
+    "LICENSE.md",
+    "README.md",
+]
+
+packages = [
+    { include = "featureranker", from = "src" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+scikit-learn = "^1.3.2"
+scipy = "^1.11.2"
+pandas = "^2.1.1"
+tqdm = "^4.66.1"
+numpy = "^1.26.0"
+matplotlib = "^3.8.1"
+xgboost = "^2.0.1"
+
+
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
