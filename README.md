@@ -15,16 +15,20 @@ Install
 ```
 !pip install featureranker
 ```
-Examples
+imports
+
 ```
+from featureranker.utils import *
+from featureranker.plots import *
+from featureranker.rankers import *
+
 import pandas as pd
 from sklearn.datasets import load_diabetes, load_breast_cancer
 import warnings
 warnings.filterwarnings('ignore')
-from featureranker.utils import *
-from featureranker.plots import *
-from featureranker.rankers import *
-# Regression example
+```
+Regression example (diabetes dataset)
+```
 diabetes = load_diabetes(as_frame=True)
 df = diabetes.data.merge(diabetes.target, left_index=True, right_index=True)
 view_data(df)
@@ -43,8 +47,8 @@ plot_ranking(scoring, title='Regression example')
 
 <img src="https://github.com/lhallee/featureranker/assets/72926928/912fdc22-7652-474d-9668-fe4da75b2473" width="500"/>
 
+Classification example (breast cancer dataset)
 ```
-# Classification example
 cancer = load_breast_cancer(as_frame=True)
 df = cancer.data.merge(cancer.target, left_index=True, right_index=True)
 view_data(df)
