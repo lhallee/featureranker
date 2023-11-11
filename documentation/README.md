@@ -34,7 +34,7 @@ With help from ChatGPT Python Doc Writer
 * init_step - extreme value for associated method as a starting point
 * returns - optimal step value (and starting point for classification version)
 
-### `l1_classification_ranking(X, y)` and `l1_regression_ranking(X, y)
+### `l1_classification_ranking(X, y)` and `l1_regression_ranking(X, y)`
 **Purpose:** Perform feature ranking using L1 regularization for classification and regression tasks.
 
 **Usage:** These functions iteratively apply L1 regularization to determine the order in which features become irrelevant as the regularization strength increases, thus ranking features based on their importance.
@@ -62,7 +62,7 @@ With help from ChatGPT Python Doc Writer
 * rf_hypers, xb_hypers - dictionaries with hyperparameters found by hyper_param_search
 * returns - pandas DataFrame of each result concatenated
 
-### `voting(df, weights=(0.2, 0.2, 0.2, 0.2, 0.2))
+### `voting(df, weights=(0.2, 0.2, 0.2, 0.2, 0.2))`
 **Purpose:** Implements a voting mechanism to combine different feature ranking methods and calculate a final, aggregated feature ranking.
 
 **Usage:** This function allows for a weighted combination of different feature ranking methods, offering a holistic view of feature importance across various models and techniques.
@@ -78,7 +78,7 @@ With help from ChatGPT Python Doc Writer
 
 ## [UTILS.py](https://github.com/lhallee/featureranker/blob/main/src/featureranker/utils.py)
 
-### `sanitize_column_names(df)
+### `sanitize_column_names(df)`
 **Purpose:** Cleans up DataFrame column names by replacing typical unwanted characters (such as `[]<>{} `) with underscores `_`.
 
 **Usage:** This function is particularly useful when dealing with datasets that have complex or unstructured column names, ensuring compatibility with popular package naming conventions.
@@ -126,7 +126,7 @@ With help from ChatGPT Python Doc Writer
 * y_pred - list of predicted values
 * returns - spearman r
 
-### `regression_hyper_param_search(X, y, cv, num_runs, model_params=model_params, save=False)
+### `regression_hyper_param_search(X, y, cv, num_runs, model_params=model_params, save=False)`
 **Purpose:** Performs hyperparameter tuning for regression models, using randomized searches over a specified parameter grid.
 
 **Usage:** Gather XGBoost and Random forest hyperparameters for better feature ranking.
