@@ -41,9 +41,7 @@ plot_ranking(scoring, title='Regression example')
 
 <img src="https://github.com/lhallee/featureranker/assets/72926928/ef258433-aa56-447b-8847-2d391be6a941" width="500"/>
 
-<p align="center">
-  <img src="https://github.com/lhallee/featureranker/assets/72926928/912fdc22-7652-474d-9668-fe4da75b2473" width="500"/>
-</p>
+<img src="https://github.com/lhallee/featureranker/assets/72926928/912fdc22-7652-474d-9668-fe4da75b2473" width="500"/>
 
 ```
 # Classification example
@@ -63,9 +61,8 @@ plot_ranking(scoring, title='Classification example')
 
 <img src="https://github.com/lhallee/featureranker/assets/72926928/088ed7ea-098e-4ef7-ab26-d5f1dff88106" width="500"/>
 
-<p align="center">
-  <img src="https://github.com/lhallee/featureranker/assets/72926928/63100c6e-2b79-496d-9d3c-640593ccc1d7" width="500"/>
-</p>
+<img src="https://github.com/lhallee/featureranker/assets/72926928/63100c6e-2b79-496d-9d3c-640593ccc1d7" width="500"/>
+
 
 ## [Documentation](https://github.com/lhallee/featureranker/tree/main/documentation)
 See documentation for more details
