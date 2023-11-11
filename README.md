@@ -7,6 +7,8 @@ featureranker is a lightweight Python package for the feature ranking ensemble d
 
 [Exploring Phylogenetic Classification and Further Applications of Codon Usage Frequencies](https://www.biorxiv.org/content/10.1101/2022.07.20.500846v1.abstract)
 
+The ensemble utilizes l1 penalization, random forests, extreme gradient boosting, ANOVA F values, and mutual information to effectively rank the importance of features for regression and classification tasks. Scoring lists are concatenated with a weighted voting scheme.
+
 ## Usage
 
 Install
@@ -35,11 +37,13 @@ scoring = voting(ranking)
 plot_ranking(scoring, title='Regression example')
 ```
 
-<img src="https://github.com/lhallee/featureranker/assets/72926928/7c61cfa6-7bd3-40f0-a319-7d00c2e7e743" width="400"/>
+<img src="https://github.com/lhallee/featureranker/assets/72926928/8b8a2237-d5fb-4c72-a684-3ddfdccaa5bd" width="500"/>
 
-<img src="https://github.com/lhallee/featureranker/assets/72926928/ef258433-aa56-447b-8847-2d391be6a941" width="400"/>
+<img src="https://github.com/lhallee/featureranker/assets/72926928/ef258433-aa56-447b-8847-2d391be6a941" width="500"/>
 
-<img src="https://github.com/lhallee/featureranker/assets/72926928/912fdc22-7652-474d-9668-fe4da75b2473" width="400"/>
+<p align="center">
+  <img src="https://github.com/lhallee/featureranker/assets/72926928/912fdc22-7652-474d-9668-fe4da75b2473" width="500"/>
+</p>
 
 ```
 # Classification example
@@ -55,12 +59,13 @@ scoring = voting(ranking)
 plot_ranking(scoring, title='Classification example')
 ```
 
-<img src="https://github.com/lhallee/featureranker/assets/72926928/7c61cfa6-7bd3-40f0-a319-7d00c2e7e743" width="400"/>
+<img src="https://github.com/lhallee/featureranker/assets/72926928/7c61cfa6-7bd3-40f0-a319-7d00c2e7e743" width="500"/>
 
-<img src="https://github.com/lhallee/featureranker/assets/72926928/088ed7ea-098e-4ef7-ab26-d5f1dff88106" width="400"/>
+<img src="https://github.com/lhallee/featureranker/assets/72926928/088ed7ea-098e-4ef7-ab26-d5f1dff88106" width="500"/>
 
-<img src="https://github.com/lhallee/featureranker/assets/72926928/63100c6e-2b79-496d-9d3c-640593ccc1d7" width="400"/>
-
+<p align="center">
+  <img src="https://github.com/lhallee/featureranker/assets/72926928/63100c6e-2b79-496d-9d3c-640593ccc1d7" width="500"/>
+</p>
 
 ## [Documentation](https://github.com/lhallee/featureranker/tree/main/documentation)
 See documentation for more details
