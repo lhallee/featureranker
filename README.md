@@ -84,7 +84,7 @@ bioRxiv 2023.09.15.558027; doi: https://doi.org/10.1101/2023.09.15.558027_
 ## News
 * 7/21/2022: A preliminary version of this feature ranker leveraging lasso and random forests is published in BioRxiv for phylogenetic and organelle prediction.
 * 2/6/2023: The preliminary work makes its way into Nature Scientific Reports!
-* 9/17/2023: The feature ranker is now a proper ensemble, with a custom soft voting scheme. XGboost, recursive feature elimination, and mutual information are also leveraged.
+* 9/17/2023: The feature ranker is now a proper ensemble, with a custom soft voting scheme. XGboost, recursive feature elimination, and mutual information are also leveraged. The ensemble is used to unify the results of the previous papers in the cdsBERT paper.
 * 10/15/2023: A separate classification and regression version are developed for more reliable results. Logistic regression (OvR) with an l1 penalty takes the place of lasso for classification.
 * 11/7/2023: Recursive feature extraction is replaced with ANOVA F-scores due to its ability to rank based on modeled variance.
 * 11/8/2023: Various utility helpers and plot functions are added for ease of use. The proper l1 penalty constant is now found automatically. The automatic hyperparameter search also returns the best metrics found via the methodologies.
