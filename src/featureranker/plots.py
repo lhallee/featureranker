@@ -46,13 +46,14 @@ def plot_confusion_matrix(c_matrix, labels, title='example', save=False):
     plt.close()
 
 
-def plot_ranking(scoring, title='example', save=False, height_per_feature=0.5):
+def plot_ranking(scoring, title='example', save=False, height_per_feature=0.5, highlight_feature=None):
     features = [item[0] for item in scoring]
     scores = [item[1] for item in scoring]
     fig_height = len(features) * height_per_feature
     fig, ax = plt.subplots(figsize=(10, fig_height))
     fig.patch.set_facecolor('white')
-    ax.barh(features, scores, color='blue', alpha=0.6)
+    colors = ['blue' if feature != highlight_feature else 'yellow' for feature in features]
+    ax.barh(features, scores, color=colors, alpha=0.6)
     ax.invert_yaxis()
     label_opts = {'color': 'black', 'bbox': dict(facecolor='white', edgecolor='none')}
     ax.set_xlabel('Scores', **label_opts)

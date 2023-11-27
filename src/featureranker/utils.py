@@ -69,8 +69,8 @@ model_params = {
 }
 
 
-def sanitize_column_names(df): # remove typical unwanted characters from column names
-    df.columns = [col.translate(str.maketrans('[]<>{}', '____')) for col in df.columns]
+def sanitize_column_names(df):
+    df.columns = [col.translate(str.maketrans('[]<>{}', '______')) for col in df.columns]
     return df
 
 
@@ -88,7 +88,7 @@ def view_data(df):
 
 def get_data(df, labels, thresh=0.8, columns_to_drop=None):
     y = df[labels]
-    df_clean = df.drop(columns=columns_to_drop + labels if columns_to_drop is not None else labels)
+    df_clean = df.drop(columns=columns_to_drop + [labels] if columns_to_drop is not None else labels)
     threshold = thresh * len(df_clean)
     df_clean = df_clean.dropna(axis=1, thresh=threshold)
     combined = pd.concat([df_clean, y], axis=1)
@@ -96,10 +96,12 @@ def get_data(df, labels, thresh=0.8, columns_to_drop=None):
     df_clean = combined_clean[df_clean.columns]
     y = combined_clean[labels]
     le = LabelEncoder()
-    columns_to_encode = df_clean.select_dtypes(include=['object', 'string']).columns
+    columns_to_encode = df_clean.select_dtypes(include=['object', 'string', 'bool']).columns.tolist()
     for column in columns_to_encode:
         df_clean[column] = le.fit_transform(df_clean[column])
     X = df_clean
+    if y.dtype == 'boolean':
+        y = y.astype(int)
     return X, y
 
 
