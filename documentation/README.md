@@ -199,7 +199,7 @@ With help from ChatGPT Python Doc Writer
 * save - bool to save the plot
 
 
-### `plot_ranking(scoring, title='example', save=False, height_per_feature=0.5)`
+### `plot_ranking(scoring, title='example', save=False, height_per_feature=0.5, highlight_feature=None)`
 **Purpose:** Produces bar charts to showcase ranked features based on aggregate scores.
 
 **Usage**: Ideal for visually representing feature importance rankings, which is crucial in feature selection and understanding model behavior.
@@ -209,9 +209,11 @@ With help from ChatGPT Python Doc Writer
 * Inverted y-axis for a top-down ranking view
 * Option to save the plot as an image file
 * Option to scale the height of the plot per features
+* Option to highlight specific features in yellow instead of blue
 
 **Variables:**
 * scoring - list of tuples with features and ensemble scores
 * title - string for the title of the plot
 * save - bool to save or not save the plot
 * height_per_feature - float scaling factor for the height of the plot per feature
+* highlight_feature - list of feature names to highlight in yellow
