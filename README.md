@@ -82,12 +82,13 @@ _Logan Hallee, Nikolaos Rafailidis, Jason P. Gleghorn
 bioRxiv 2023.09.15.558027; doi: https://doi.org/10.1101/2023.09.15.558027_
 
 ## News
-* 7/21/2022: A preliminary version of this feature ranker leveraging lasso and random forests is published in BioRxiv for phylogenetic and organelle prediction.
-* 2/6/2023: The preliminary work makes its way into Nature Scientific Reports!
-* 9/17/2023: The feature ranker is now a proper ensemble, with a custom soft voting scheme. XGboost, recursive feature elimination, and mutual information are also leveraged. The ensemble is used to unify the results of the previous papers in the cdsBERT paper.
-* 10/15/2023: A separate classification and regression version are developed for more reliable results. Logistic regression (OvR) with an l1 penalty takes the place of lasso for classification.
-* 11/7/2023: Recursive feature extraction is replaced with ANOVA F-scores due to its ability to rank based on modeled variance.
-* 11/8/2023: Various utility helpers and plot functions are added for ease of use. The proper l1 penalty constant is now found automatically. The automatic hyperparameter search also returns the best metrics found via the methodologies.
-* 11/9/2023: Version 1.0.0 of the package is published for testing on TestPyPI.
+* 1/3/2023: Version 1.0.2 is released with added clustering capabilities and better automatic plots.
 * 11/10/2023: Version 1.0.1 is published in PyPI under featureranker.
+* 11/9/2023: Version 1.0.0 of the package is published for testing on TestPyPI.
+* 11/8/2023: Various utility helpers and plot functions are added for ease of use. The proper l1 penalty constant is now found automatically. The automatic hyperparameter search also returns the best metrics found via the methodologies.
+* 11/7/2023: Recursive feature extraction is replaced with ANOVA F-scores due to its ability to rank based on modeled variance.
+* 10/15/2023: A separate classification and regression version are developed for more reliable results. Logistic regression (OvR) with an l1 penalty takes the place of lasso for classification.
+* 9/17/2023: The feature ranker is now a proper ensemble, with a custom soft voting scheme. XGboost, recursive feature elimination, and mutual information are also leveraged. The ensemble is used to unify the results of the previous papers in the cdsBERT paper.
+* 2/6/2023: The preliminary work makes its way into Nature Scientific Reports!
+* 7/21/2022: A preliminary version of this feature ranker leveraging lasso and random forests is published in BioRxiv for phylogenetic and organelle prediction.
 
