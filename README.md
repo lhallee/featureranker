@@ -70,7 +70,7 @@ _Logan Hallee, Nikolaos Rafailidis, Jason P. Gleghorn
 bioRxiv 2023.09.15.558027; doi: https://doi.org/10.1101/2023.09.15.558027_
 
 ## News
-* 1/22/2023: Version 1.1.0 is released with faster solvers, many more settings, and more plots.
+* 1/22/2023: Version 1.1.0 is released with faster solvers, many more settings, and more plots. 1.1.1 fixes some bugs.
 * 1/3/2023: Version 1.0.2 is released with added clustering capabilities and better automatic plots.
 * 11/10/2023: Version 1.0.1 is published in PyPI under featureranker.
 * 11/9/2023: Version 1.0.0 of the package is published for testing on TestPyPI.
