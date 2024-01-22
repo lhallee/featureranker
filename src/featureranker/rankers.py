@@ -8,7 +8,7 @@ from sklearn.svm import l1_min_c
 from xgboost import XGBClassifier, XGBRegressor
 from tqdm.auto import tqdm
 
-from utils import classification_hyper_param_search, regression_hyper_param_search
+from featureranker.utils import classification_hyper_param_search, regression_hyper_param_search
 
 
 def make_ranking(name, cols, importance):
