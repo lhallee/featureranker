@@ -29,17 +29,16 @@ warnings.filterwarnings('ignore')
 ```
 Regression example (diabetes dataset)
 ```
-diabetes = load_diabetes(as_frame=True)
 df = diabetes.data.merge(diabetes.target, left_index=True, right_index=True)
 view_data(df)
 X, y = get_data(df, labels='target')
-hypers = regression_hyper_param_search(X, y, 3, 5)
-xb_hypers = hypers[0]['best_params']
-rf_hypers = hypers[1]['best_params']
-ranking = regression_ranking(X, y, rf_hypers, xb_hypers)
-scoring = voting(ranking)
-plot_ranking(scoring, title='Regression example')
+rankings = regression_ranking(X, y, predict=False)
+scoring = voting(rankings)
+plot_rankings(rankings, title='Regression example all methods')
+plot_after_vote(scoring, title='Regression example full ensemble')
 ```
+![image](https://github.com/lhallee/featureranker/assets/72926928/a95c8ac9-11b5-45df-827f-0be1255c82ea)
+![image](https://github.com/lhallee/featureranker/assets/72926928/710ed10e-eed5-4f0e-b9f8-997c7fb0de8b)
 
 <img src="https://github.com/lhallee/featureranker/assets/72926928/8b8a2237-d5fb-4c72-a684-3ddfdccaa5bd" width="500"/>
 
@@ -53,20 +52,21 @@ cancer = load_breast_cancer(as_frame=True)
 df = cancer.data.merge(cancer.target, left_index=True, right_index=True)
 view_data(df)
 X, y = get_data(df, labels='target')
-hypers = classification_hyper_param_search(X, y, 3, 5)
-xb_hypers = hypers[0]['best_params']
-rf_hypers = hypers[1]['best_params']
-ranking = classification_ranking(X, y, rf_hypers, xb_hypers)
-scoring = voting(ranking)
-plot_ranking(scoring, title='Classification example')
+rankings = classification_ranking(X, y, predict=False)
+scoring = voting(rankings)
+plot_rankings(rankings, title='Classification example all methods')
+plot_after_vote(scoring, title='Classification example full ensemble')
 ```
+![image](https://github.com/lhallee/featureranker/assets/72926928/fbb1308f-118f-4db2-a5a4-9c65d510fbc3)
+![image](https://github.com/lhallee/featureranker/assets/72926928/88373375-18a3-4c82-99b2-1aec7b79aaa4)
+
 
 <img src="https://github.com/lhallee/featureranker/assets/72926928/7c61cfa6-7bd3-40f0-a319-7d00c2e7e743" width="500"/>
 
 <img src="https://github.com/lhallee/featureranker/assets/72926928/088ed7ea-098e-4ef7-ab26-d5f1dff88106" width="500"/>
 
 <img src="https://github.com/lhallee/featureranker/assets/72926928/63100c6e-2b79-496d-9d3c-640593ccc1d7" width="500"/>
-
+### [More examples](https://github.com/lhallee/featureranker/tree/main/examples)
 
 ## [Documentation](https://github.com/lhallee/featureranker/tree/main/documentation)
 See documentation via the link above for more details
