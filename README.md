@@ -29,6 +29,7 @@ warnings.filterwarnings('ignore')
 ```
 Regression example (diabetes dataset)
 ```
+diabetes = load_diabetes(as_frame=True)
 df = diabetes.data.merge(diabetes.target, left_index=True, right_index=True)
 view_data(df)
 X, y = get_data(df, labels='target')
