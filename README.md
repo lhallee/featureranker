@@ -40,12 +40,6 @@ plot_after_vote(scoring, title='Regression example full ensemble')
 ![image](https://github.com/lhallee/featureranker/assets/72926928/a95c8ac9-11b5-45df-827f-0be1255c82ea)
 ![image](https://github.com/lhallee/featureranker/assets/72926928/710ed10e-eed5-4f0e-b9f8-997c7fb0de8b)
 
-<img src="https://github.com/lhallee/featureranker/assets/72926928/8b8a2237-d5fb-4c72-a684-3ddfdccaa5bd" width="500"/>
-
-<img src="https://github.com/lhallee/featureranker/assets/72926928/ef258433-aa56-447b-8847-2d391be6a941" width="500"/>
-
-<img src="https://github.com/lhallee/featureranker/assets/72926928/912fdc22-7652-474d-9668-fe4da75b2473" width="500"/>
-
 Classification example (breast cancer dataset)
 ```
 cancer = load_breast_cancer(as_frame=True)
@@ -60,12 +54,6 @@ plot_after_vote(scoring, title='Classification example full ensemble')
 ![image](https://github.com/lhallee/featureranker/assets/72926928/fbb1308f-118f-4db2-a5a4-9c65d510fbc3)
 ![image](https://github.com/lhallee/featureranker/assets/72926928/88373375-18a3-4c82-99b2-1aec7b79aaa4)
 
-
-<img src="https://github.com/lhallee/featureranker/assets/72926928/7c61cfa6-7bd3-40f0-a319-7d00c2e7e743" width="500"/>
-
-<img src="https://github.com/lhallee/featureranker/assets/72926928/088ed7ea-098e-4ef7-ab26-d5f1dff88106" width="500"/>
-
-<img src="https://github.com/lhallee/featureranker/assets/72926928/63100c6e-2b79-496d-9d3c-640593ccc1d7" width="500"/>
 ### [More examples](https://github.com/lhallee/featureranker/tree/main/examples)
 
 ## [Documentation](https://github.com/lhallee/featureranker/tree/main/documentation)
@@ -82,6 +70,7 @@ _Logan Hallee, Nikolaos Rafailidis, Jason P. Gleghorn
 bioRxiv 2023.09.15.558027; doi: https://doi.org/10.1101/2023.09.15.558027_
 
 ## News
+* 1/22/2023: Version 1.1.0 is released with faster solvers, many more settings, and more plots.
 * 1/3/2023: Version 1.0.2 is released with added clustering capabilities and better automatic plots.
 * 11/10/2023: Version 1.0.1 is published in PyPI under featureranker.
 * 11/9/2023: Version 1.0.0 of the package is published for testing on TestPyPI.
