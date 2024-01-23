@@ -127,7 +127,7 @@ def regression_ranking(X, y,
         f = make_ranking('F', cols, np.nan_to_num(f_regression(X, y)[0]))
         rankings.append(('F', f))
     if 'l1' in choices:
-        l1 = l1_regression_ranking(X, y, norm=norm, verbose=verbose)
+        l1 = l1_regression_ranking(X, y, norm=norm, scale=scale, num_alphas=num_alphas, verbose=verbose)
         rankings.append(('L1', l1))
     if not rankings:
         print('You did not pass any correct choices. Try again.')
