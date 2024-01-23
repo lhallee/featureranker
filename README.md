@@ -60,6 +60,10 @@ plot_after_vote(scoring, title='Classification example full ensemble')
 ## [Documentation](https://github.com/lhallee/featureranker/tree/main/documentation)
 See documentation via the link above for more details
 
+## ISSUES WITH GOOGLE COLAB
+The numpy / linux build on Google Colab does not always work when installing featureranker on collab.
+**Simply upgrade numpy and restart the session to fix featureranker.**
+
 ## Citation
 Please cite 
 _Hallee, L., Khomtchouk, B.B. Machine learning classifiers predict key genomic and evolutionary traits across the kingdoms of life. Sci Rep 13, 2088 (2023).
