@@ -10,7 +10,7 @@ from xgboost import XGBClassifier, XGBRegressor
 from scipy.stats import spearmanr
 from skopt import BayesSearchCV
 
-from .plots import plot_confusion_matrix, plot_correlations
+from featureranker.plots import plot_confusion_matrix, plot_correlations
 
 
 model_params = {
