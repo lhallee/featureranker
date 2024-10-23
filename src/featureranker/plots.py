@@ -50,8 +50,8 @@ def plot_confusion_matrix(c_matrix, labels, title='example', save=False):
 
 
 def plot_after_vote(scoring, title='example', save=False, height_per_feature=0.25, highlight_feature=None):
-    features = [item[0] for item in scoring]
-    scores = [item[1] for item in scoring]
+    features = scoring['Feature'].tolist()
+    scores = scoring['Score'].tolist()
     fig_height = len(features) * height_per_feature
     fig, ax = plt.subplots(figsize=(10, fig_height))
     fig.patch.set_facecolor('white')
@@ -74,7 +74,6 @@ def plot_rankings(rankings, title='example', save=False, height_per_feature=0.25
     fig, ax = plt.subplots(figsize=(10, len(rankings[0][1]) * height_per_feature))
     colors = ['blue', 'green', 'red', 'yellow', 'cyan']
     legend_labels = []  # List to hold the legend labels
-
     for i in range(len(rankings)):
         ranking_name, ranking = rankings[i]
         features = ranking[ranking_name].tolist()
