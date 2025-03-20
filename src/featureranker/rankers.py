@@ -15,7 +15,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import l1_min_c
 from xgboost import XGBClassifier, XGBRegressor
 
-from featureranker.utils import (
+from .utils import (
     classification_hyper_param_search,
     regression_hyper_param_search,
 )
