@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "featureranker"
-version = "1.3.0"
+version = "1.3.2"
 description = "Feature ranking ensemble"
 authors = ["Logan Hallee <lhallee99@gmail.com>"]
 keywords = ["feature, ranker, sklearn"]
