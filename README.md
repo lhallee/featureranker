@@ -15,50 +15,9 @@ Install
 ```
 !pip install featureranker
 ```
-Imports
-
-```
-from featureranker.utils import *
-from featureranker.plots import *
-from featureranker.rankers import *
-
-import pandas as pd
-from sklearn.datasets import load_diabetes, load_breast_cancer
-import warnings
-warnings.filterwarnings('ignore')
-```
-Regression example (diabetes dataset)
-```
-diabetes = load_diabetes(as_frame=True)
-df = diabetes.data.merge(diabetes.target, left_index=True, right_index=True)
-view_data(df)
-X, y = get_data(df, labels='target')
-rankings = regression_ranking(X, y, predict=False)
-scoring = voting(rankings)
-plot_rankings(rankings, title='Regression example all methods')
-plot_after_vote(scoring, title='Regression example full ensemble')
-```
-![image](https://github.com/lhallee/featureranker/assets/72926928/a95c8ac9-11b5-45df-827f-0be1255c82ea)
-![image](https://github.com/lhallee/featureranker/assets/72926928/710ed10e-eed5-4f0e-b9f8-997c7fb0de8b)
-
-Classification example (breast cancer dataset)
-```
-cancer = load_breast_cancer(as_frame=True)
-df = cancer.data.merge(cancer.target, left_index=True, right_index=True)
-view_data(df)
-X, y = get_data(df, labels='target')
-rankings = classification_ranking(X, y, predict=False)
-scoring = voting(rankings)
-plot_rankings(rankings, title='Classification example all methods')
-plot_after_vote(scoring, title='Classification example full ensemble')
-```
-![image](https://github.com/lhallee/featureranker/assets/72926928/fbb1308f-118f-4db2-a5a4-9c65d510fbc3)
-![image](https://github.com/lhallee/featureranker/assets/72926928/88373375-18a3-4c82-99b2-1aec7b79aaa4)
-
-### [More examples](https://github.com/lhallee/featureranker/tree/main/examples)
+### [Example use](https://github.com/lhallee/featureranker/blob/main/example_usage.ipynb)
 
 ## [Documentation](https://github.com/lhallee/featureranker/tree/main/documentation)
-See documentation via the link above for more details
 
 ## ISSUES WITH GOOGLE COLAB
 The numpy / linux build on Google Colab does not always work when installing featureranker on collab.
@@ -66,15 +25,36 @@ The numpy / linux build on Google Colab does not always work when installing fea
 
 ## Citation
 Please cite 
-_Hallee, L., Khomtchouk, B.B. Machine learning classifiers predict key genomic and evolutionary traits across the kingdoms of life. Sci Rep 13, 2088 (2023).
-https://doi.org/10.1038/s41598-023-28965-7_
-
-and
-
-_Logan Hallee, Nikolaos Rafailidis, Jason P. Gleghorn
-bioRxiv 2023.09.15.558027; doi: https://doi.org/10.1101/2023.09.15.558027_
+```
+@article{Hallee2023,
+  title = {Machine learning classifiers predict key genomic and evolutionary traits across the kingdoms of life},
+  volume = {13},
+  ISSN = {2045-2322},
+  url = {http://dx.doi.org/10.1038/s41598-023-28965-7},
+  DOI = {10.1038/s41598-023-28965-7},
+  number = {1},
+  journal = {Scientific Reports},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Hallee,  Logan and Khomtchouk,  Bohdan B.},
+  year = {2023},
+  month = feb 
+}
+```
+```
+@article{Hallee2023,
+  title = {cdsBERT - Extending Protein Language Models with Codon Awareness},
+  url = {http://dx.doi.org/10.1101/2023.09.15.558027},
+  DOI = {10.1101/2023.09.15.558027},
+  publisher = {Cold Spring Harbor Laboratory},
+  author = {Hallee,  Logan and Rafailidis,  Nikolaos and Gleghorn,  Jason P.},
+  year = {2023},
+  month = sep 
+}
+```
 
 ## News
+* 3/20/2025: Version 1.3.0 is released with improved runtime, documentation, and examples.
+* 10/22/2024: Versions 1.2.0 - 1.2.2 are released with improvements and bug fixes.
 * 1/22/2024: Version 1.1.0 is released with faster solvers, many more settings, and more plots. 1.1.1 fixes some bugs.
 * 1/3/2024: Version 1.0.2 is released with added clustering capabilities and better automatic plots.
 * 11/10/2023: Version 1.0.1 is published in PyPI under featureranker.

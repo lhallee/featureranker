@@ -1,6 +1,3 @@
-<<<<<<< Updated upstream
-__version__ = "1.0.0"
-=======
 """
 Feature Ranker - A package for ranking features using multiple methods.
 
@@ -19,4 +16,3 @@ from .utils import *
 from .rankers import *
 from .plots import *
 from .clustering import *
->>>>>>> Stashed changes

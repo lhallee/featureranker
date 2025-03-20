@@ -1,6 +1,4 @@
-from src.featureranker.utils import *
-from src.featureranker.plots import *
-from src.featureranker.rankers import *
+from featureranker import get_data, view_data, feature_ranking, voting, plot_after_vote
 from datasets import load_dataset
 
 
