@@ -21,7 +21,7 @@ from .utils import (
 )
 
 
-def make_ranking(name: str, cols: List[str], importance: np.ndarray) -> pd.DataFrame:
+def make_ranking(name: str, cols: List[str], importance: np.ndarray, **kwargs) -> pd.DataFrame:
     """
     Create a DataFrame ranking features based on their importance scores.
 
@@ -42,7 +42,7 @@ def make_ranking(name: str, cols: List[str], importance: np.ndarray) -> pd.DataF
     )
 
 
-def l1_regression_ranking(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
+def l1_regression_ranking(X: pd.DataFrame, y: pd.Series, **kwargs) -> pd.DataFrame:
     """
     Perform feature ranking using L1-regularized linear regression by increasing penalization
     until each coefficient is zeroed out.
@@ -83,7 +83,7 @@ def l1_regression_ranking(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
     return ranking
 
 
-def l1_classification_ranking(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
+def l1_classification_ranking(X: pd.DataFrame, y: pd.Series, **kwargs) -> pd.DataFrame:
     """
     Perform feature ranking using L1-regularized logistic regression by increasing penalization
     until each coefficient is zeroed out.
@@ -288,7 +288,8 @@ def voting(
     rankings: List[Tuple[str, pd.DataFrame]],
     weights: Optional[List[float]] = None,
     save: bool = False,
-    save_path: Optional[str] = None
+    save_path: Optional[str] = None,
+    **kwargs,
 ) -> pd.DataFrame:
     """
     Aggregate feature rankings using a weighted voting scheme.
