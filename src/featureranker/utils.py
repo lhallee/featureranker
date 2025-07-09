@@ -9,8 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier, XGBRegressor
 from scipy.stats import spearmanr
 from skopt import BayesSearchCV
-
-from featureranker.plots import plot_confusion_matrix, plot_correlations
+from .plots import plot_confusion_matrix, plot_correlations
 
 
 model_params = {
@@ -216,7 +215,8 @@ def regression_hyper_param_search(
     model_name: str,
     cv: int = 3,
     n_iter: int = 5,
-    verbose: int = 0,
+    verbose: int = 2,
+    n_jobs: int = -1,
     model_params: Dict = model_params,
     save: bool = False,
     predict: bool = True,
@@ -242,7 +242,7 @@ def regression_hyper_param_search(
         n_iter=n_iter,
         cv=cv,
         scoring="neg_mean_squared_error",
-        n_jobs=-1,
+        n_jobs=n_jobs,
         verbose=verbose,
         random_state=42,
     )
@@ -259,7 +259,8 @@ def classification_hyper_param_search(
     model_name: str,
     cv: int = 3,
     n_iter: int = 5,
-    verbose: int = 0,
+    verbose: int = 2,
+    n_jobs: int = -1,
     model_params: Dict = model_params,
     save: bool = False,
     predict: bool = True,
@@ -285,13 +286,13 @@ def classification_hyper_param_search(
         n_iter=n_iter,
         cv=cv,
         scoring="accuracy",
-        n_jobs=-1,
+        n_jobs=n_jobs,
         verbose=verbose,
         random_state=42,
     )
     opt.fit(X, y)
     if predict:
-        predictions = cross_val_predict(opt.best_estimator_, X, y, cv=cv, n_jobs=-1)
+        predictions = cross_val_predict(opt.best_estimator_, X, y, cv=cv, n_jobs=n_jobs)
         acc = accuracy_score(y, predictions)
         cm = confusion_matrix(y, predictions)
         plot_confusion_matrix(
