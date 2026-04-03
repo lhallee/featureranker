@@ -1,40 +1,34 @@
-import pandas as pd
-import numpy as np
-import warnings
+import logging
+import math
 import pickle
-from typing import List, Tuple, Optional
+from collections import defaultdict
+from datetime import datetime
+
+import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.linear_model import LogisticRegression, lasso_path
 from sklearn.feature_selection import (
-    f_regression,
     f_classif,
+    f_regression,
     mutual_info_classif,
     mutual_info_regression,
 )
+from sklearn.linear_model import LogisticRegression, lasso_path
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import l1_min_c
 from xgboost import XGBClassifier, XGBRegressor
 
-from .utils import (
-    classification_hyper_param_search,
-    regression_hyper_param_search,
-)
+from .utils import hyper_param_search
+
+logger = logging.getLogger(__name__)
 
 
-def make_ranking(name: str, cols: List[str], importance: np.ndarray, **kwargs) -> pd.DataFrame:
-    """
-    Create a DataFrame ranking features based on their importance scores.
-
-    Parameters:
-        name (str): The name of the ranking method.
-        cols (List[str]): List of feature names.
-        importance (np.ndarray): Importance scores corresponding to the features.
-
-    Returns:
-        pd.DataFrame: DataFrame sorted by the importance scores in descending order.
-    """
-    if len(cols) != len(importance):
-        raise ValueError("The length of 'cols' and 'importance' must be the same.")
+def make_ranking(name: str, cols: list[str], importance: np.ndarray) -> pd.DataFrame:
+    """Create a DataFrame ranking features by importance scores."""
+    assert len(cols) == len(importance), (
+        f"Length mismatch: {len(cols)} columns vs {len(importance)} scores."
+    )
     return (
         pd.DataFrame({name: cols, "Score": importance})
         .sort_values(by="Score", ascending=False)
@@ -42,279 +36,271 @@ def make_ranking(name: str, cols: List[str], importance: np.ndarray, **kwargs) -
     )
 
 
-def l1_regression_ranking(X: pd.DataFrame, y: pd.Series, **kwargs) -> pd.DataFrame:
-    """
-    Perform feature ranking using L1-regularized linear regression by increasing penalization
-    until each coefficient is zeroed out.
-
-    Parameters:
-        X (pd.DataFrame): Feature matrix.
-        y (pd.Series): Target vector.
-
-    Returns:
-        pd.DataFrame: DataFrame containing features and the penalization level at which
-                      they are zeroed out.
-    """
-    # Standardize features
+def l1_regression_ranking(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
+    """Rank features via L1-regularized linear regression (lasso path)."""
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Compute the Lasso path
     alphas, coefs, _ = lasso_path(X_scaled, y)
-
-    # Reverse alphas and coefs to have increasing penalization
     alphas = alphas[::-1]
     coefs = coefs[:, ::-1]
 
-    # For each feature, find the maximum alpha where the coefficient is non-zero
     zeroing_alphas = []
     for i in range(coefs.shape[0]):
-        coef_i = coefs[i, :]
-        non_zero_indices = np.where(coef_i != 0)[0]
-        if non_zero_indices.size > 0:
-            zero_alpha = alphas[non_zero_indices[-1]]  # Last alpha where coef is non-zero
+        non_zero = np.where(coefs[i, :] != 0)[0]
+        if non_zero.size > 0:
+            zeroing_alphas.append(alphas[non_zero[-1]])
         else:
-            zero_alpha = alphas[0]
-        zeroing_alphas.append(zero_alpha)
+            zeroing_alphas.append(alphas[0])
 
-    ranking = pd.DataFrame({'L1': X.columns, 'Score': zeroing_alphas})
-    ranking.sort_values(by='Score', ascending=False, inplace=True)
-    ranking.reset_index(drop=True, inplace=True)
-    return ranking
+    return (
+        pd.DataFrame({"L1": X.columns, "Score": zeroing_alphas})
+        .sort_values(by="Score", ascending=False)
+        .reset_index(drop=True)
+    )
 
 
-def l1_classification_ranking(X: pd.DataFrame, y: pd.Series, **kwargs) -> pd.DataFrame:
-    """
-    Perform feature ranking using L1-regularized logistic regression by increasing penalization
-    until each coefficient is zeroed out.
-
-    Parameters:
-        X (pd.DataFrame): Feature matrix.
-        y (pd.Series): Target vector.
-
-    Returns:
-        pd.DataFrame: DataFrame containing features and the penalization level at which
-                      they are zeroed out.
-    """
-    # Standardize features
+def l1_classification_ranking(
+    X: pd.DataFrame,
+    y: pd.Series,
+    n_regularization_steps: int = 50,
+) -> pd.DataFrame:
+    """Rank features via L1-regularized logistic regression."""
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Compute the minimal value of C that will zero out all coefficients
-    min_c = l1_min_c(X_scaled, y, loss='log')
+    min_c = l1_min_c(X_scaled, y, loss="log")
+    Cs = min_c * np.logspace(0, 3, n_regularization_steps)
 
-    # Define a range of Cs (inverse of regularization strength)
-    Cs = min_c * np.logspace(0, 3, 100)  # Adjust the range as necessary
-
-    # Initialize logistic regression model
     clf = LogisticRegression(
-        penalty='l1',
-        solver='liblinear',
+        l1_ratio=1.0,
+        solver="saga",
         tol=1e-6,
         max_iter=int(1e6),
         warm_start=True,
         intercept_scaling=1.0,
     )
 
-    # Store coefficients for each C
     coefs_ = []
-
     for C in Cs:
         clf.set_params(C=C)
         clf.fit(X_scaled, y)
         coefs_.append(clf.coef_.ravel().copy())
 
-    coefs_ = np.array(coefs_)  # Shape: (n_Cs, n_features)
+    coefs_ = np.array(coefs_)
 
-    # For each feature, find the maximum C where the coefficient is non-zero
     zeroing_Cs = []
     for i in range(coefs_.shape[1]):
-        coef_i = coefs_[:, i]
-        non_zero_indices = np.where(coef_i != 0)[0]
-        if non_zero_indices.size > 0:
-            zero_C = Cs[non_zero_indices[-1]]  # Last C where coef is non-zero
+        non_zero = np.where(coefs_[:, i] != 0)[0]
+        if non_zero.size > 0:
+            zeroing_Cs.append(Cs[non_zero[-1]])
         else:
-            zero_C = Cs[0]
-        zeroing_Cs.append(zero_C)
+            zeroing_Cs.append(Cs[0])
 
-    ranking = pd.DataFrame({'L1': X.columns, 'Score': zeroing_Cs})
-    ranking.sort_values(by='Score', ascending=False, inplace=True)
-    ranking.reset_index(drop=True, inplace=True)
-    return ranking
+    return (
+        pd.DataFrame({"L1": X.columns, "Score": zeroing_Cs})
+        .sort_values(by="Score", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+# --- Private ranking functions for parallel dispatch ---
+
+
+def _rank_rf(
+    X: pd.DataFrame, y: pd.Series, task: str, **kwargs
+) -> tuple[str, pd.DataFrame]:
+    logger.info("Running Random Forest %s ranking...", task)
+    params = hyper_param_search(
+        X, y, "RandomForest", task,
+        cv=kwargs.get("cv", 3),
+        n_iter=kwargs.get("n_iter", 5),
+        n_jobs=kwargs.get("search_n_jobs", -1),
+        verbose=kwargs.get("verbose", 0),
+    )
+    if task == "classification":
+        model = RandomForestClassifier(random_state=42, **params)
+    else:
+        model = RandomForestRegressor(random_state=42, **params)
+    model.fit(X, y)
+    ranking = make_ranking("RF", X.columns.tolist(), model.feature_importances_)
+    logger.info("Completed Random Forest %s ranking.", task)
+    return ("RF", ranking)
+
+
+def _rank_xg(
+    X: pd.DataFrame, y: pd.Series, task: str, **kwargs
+) -> tuple[str, pd.DataFrame]:
+    logger.info("Running XGBoost %s ranking...", task)
+    params = hyper_param_search(
+        X, y, "XGBoost", task,
+        cv=kwargs.get("cv", 3),
+        n_iter=kwargs.get("n_iter", 5),
+        n_jobs=kwargs.get("search_n_jobs", -1),
+        verbose=kwargs.get("verbose", 0),
+    )
+    if task == "classification":
+        model = XGBClassifier(eval_metric="logloss", random_state=42, **params)
+    else:
+        model = XGBRegressor(random_state=42, **params)
+    model.fit(X, y)
+    ranking = make_ranking("XG", X.columns.tolist(), model.feature_importances_)
+    logger.info("Completed XGBoost %s ranking.", task)
+    return ("XG", ranking)
+
+
+def _rank_mi(
+    X: pd.DataFrame, y: pd.Series, task: str, **kwargs
+) -> tuple[str, pd.DataFrame]:
+    logger.info("Running Mutual Information %s ranking...", task)
+    if task == "classification":
+        scores = mutual_info_classif(X, y, random_state=42)
+    else:
+        scores = mutual_info_regression(X, y, random_state=42)
+    ranking = make_ranking("MI", X.columns.tolist(), scores)
+    logger.info("Completed Mutual Information %s ranking.", task)
+    return ("MI", ranking)
+
+
+def _rank_f(
+    X: pd.DataFrame, y: pd.Series, task: str, **kwargs
+) -> tuple[str, pd.DataFrame]:
+    logger.info("Running F-test %s ranking...", task)
+    if task == "classification":
+        scores, _ = f_classif(X, y)
+    else:
+        scores, _ = f_regression(X, y)
+    scores = np.nan_to_num(scores)
+    ranking = make_ranking("F", X.columns.tolist(), scores)
+    logger.info("Completed F-test %s ranking.", task)
+    return ("F", ranking)
+
+
+def _rank_l1(
+    X: pd.DataFrame, y: pd.Series, task: str, **kwargs
+) -> tuple[str, pd.DataFrame]:
+    logger.info("Running L1 %s ranking...", task)
+    n_steps = kwargs.get("n_regularization_steps", 50)
+    if task == "classification":
+        ranking = l1_classification_ranking(X, y, n_regularization_steps=n_steps)
+    else:
+        ranking = l1_regression_ranking(X, y)
+    logger.info("Completed L1 %s ranking.", task)
+    return ("L1", ranking)
+
+
+_RANKER_DISPATCH = {
+    "rf": _rank_rf,
+    "xg": _rank_xg,
+    "mi": _rank_mi,
+    "f_test": _rank_f,
+    "l1": _rank_l1,
+}
+
+VALID_CHOICES = frozenset(_RANKER_DISPATCH.keys())
 
 
 def feature_ranking(
     X: pd.DataFrame,
     y: pd.Series,
     task: str = "classification",
-    choices: Optional[List[str]] = None,
+    choices: list[str] | None = None,
+    n_jobs: int = 1,
     save: bool = False,
-    save_path: Optional[str] = None,
+    save_path: str | None = None,
     **kwargs,
-) -> List[Tuple[str, pd.DataFrame]]:
-    """
-    General feature ranking function for both classification and regression tasks.
+) -> list[tuple[str, pd.DataFrame]]:
+    """Run an ensemble of feature ranking methods.
 
-    Parameters:
-        X (pd.DataFrame): Feature matrix.
-        y (pd.Series): Target vector.
-        task (str): 'classification' or 'regression'.
-        choices (List[str]): List of ranking methods to use.
-        save (bool): Whether to save the rankings to a pickle file.
-        save_path (str): Path to save the pickle file. If None, a default name is used.
-        **kwargs: Additional keyword arguments for hyperparameter search functions.
+    Args:
+        X: Feature matrix.
+        y: Target vector.
+        task: 'classification' or 'regression'.
+        choices: Ranking methods to use. Default: all five.
+            Options: 'rf', 'xg', 'mi', 'f_test', 'l1'.
+        n_jobs: Parallel jobs for dispatching rankers. 1=sequential, -1=all cores.
+        save: Save rankings to a pickle file.
+        save_path: Path for the pickle file.
+        **kwargs: Passed to individual rankers (cv, n_iter, verbose, n_regularization_steps, search_n_jobs).
 
     Returns:
-        List[Tuple[str, pd.DataFrame]]: List of tuples containing ranking method names and their rankings.
+        List of (method_name, ranking_dataframe) tuples.
     """
-    print(f"Starting feature ranking for task: {task.capitalize()}")
+    assert task in ("classification", "regression"), (
+        f"Invalid task: {task}. Use 'classification' or 'regression'."
+    )
 
     if choices is None:
         choices = ["rf", "xg", "mi", "f_test", "l1"]
-        print("No choices provided. Using default ranking methods:", choices)
-    else:
-        print("Ranking methods selected:", choices)
 
-    valid_choices = {"rf", "xg", "mi", "f_test", "l1"}
-    invalid_choices = set(choices) - valid_choices
-    if invalid_choices:
-        raise ValueError(f"Invalid choices provided: {invalid_choices}")
+    invalid = set(choices) - VALID_CHOICES
+    assert not invalid, f"Invalid choices: {invalid}. Valid: {VALID_CHOICES}"
 
-    cols = X.columns
-    rankings = []
+    logger.info("Feature ranking: task=%s, methods=%s, n_jobs=%d", task, choices, n_jobs)
 
-    if task == "classification":
-        if "rf" in choices:
-            print("Starting Random Forest classification ranking...")
-            rf_hyper = classification_hyper_param_search(X, y, "RandomForest", **kwargs)
-            model = RandomForestClassifier(**rf_hyper)
-            model.fit(X, y)
-            rf = make_ranking("RF", cols.tolist(), model.feature_importances_)
-            rankings.append(("RF", rf))
-            print("Completed Random Forest classification ranking.")
-        
-        if "xg" in choices:
-            print("Starting XGBoost classification ranking...")
-            xg_hyper = classification_hyper_param_search(X, y, "XGBoost", **kwargs)
-            model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', **xg_hyper)
-            model.fit(X, y)
-            xg = make_ranking("XG", cols.tolist(), model.feature_importances_)
-            rankings.append(("XG", xg))
-            print("Completed XGBoost classification ranking.")
-        
-        if "mi" in choices:
-            print("Starting Mutual Information classification ranking...")
-            mi_scores = mutual_info_classif(X, y)
-            mi = make_ranking("MI", cols.tolist(), mi_scores)
-            rankings.append(("MI", mi))
-            print("Completed Mutual Information classification ranking.")
-        
-        if "f_test" in choices:
-            print("Starting F-Test classification ranking...")
-            f_scores, _ = f_classif(X, y)
-            f_scores = np.nan_to_num(f_scores)
-            f = make_ranking("F", cols.tolist(), f_scores)
-            rankings.append(("F", f))
-            print("Completed F-Test classification ranking.")
-        
-        if "l1" in choices:
-            print("Starting L1 classification ranking...")
-            l1 = l1_classification_ranking(X, y, **kwargs)
-            rankings.append(("L1", l1))
-            print("Completed L1 classification ranking.")
-    
-    elif task == "regression":
-        if "rf" in choices:
-            print("Starting Random Forest regression ranking...")
-            rf_hyper = regression_hyper_param_search(X, y, "RandomForest", **kwargs)
-            model = RandomForestRegressor(**rf_hyper)
-            model.fit(X, y)
-            rf = make_ranking("RF", cols.tolist(), model.feature_importances_)
-            rankings.append(("RF", rf))
-            print("Completed Random Forest regression ranking.")
-        
-        if "xg" in choices:
-            print("Starting XGBoost regression ranking...")
-            xg_hyper = regression_hyper_param_search(X, y, "XGBoost", **kwargs)
-            model = XGBRegressor(**xg_hyper)
-            model.fit(X, y)
-            xg = make_ranking("XG", cols.tolist(), model.feature_importances_)
-            rankings.append(("XG", xg))
-            print("Completed XGBoost regression ranking.")
-        
-        if "mi" in choices:
-            print("Starting Mutual Information regression ranking...")
-            mi_scores = mutual_info_regression(X, y)
-            mi = make_ranking("MI", cols.tolist(), mi_scores)
-            rankings.append(("MI", mi))
-            print("Completed Mutual Information regression ranking.")
-        
-        if "f_test" in choices:
-            print("Starting F-Test regression ranking...")
-            f_scores, _ = f_regression(X, y)
-            f_scores = np.nan_to_num(f_scores)
-            f = make_ranking("F", cols.tolist(), f_scores)
-            rankings.append(("F", f))
-            print("Completed F-Test regression ranking.")
-        
-        if "l1" in choices:
-            print("Starting L1 regression ranking...")
-            l1 = l1_regression_ranking(X, y, **kwargs)
-            rankings.append(("L1", l1))
-            print("Completed L1 regression ranking.")
-    
-    else:
-        raise ValueError("Invalid task specified. Choose 'classification' or 'regression'.")
+    funcs = [_RANKER_DISPATCH[c] for c in choices]
+    rankings = Parallel(n_jobs=n_jobs, backend="loky")(
+        delayed(fn)(X, y, task, **kwargs) for fn in funcs
+    )
 
-    if not rankings:
-        warnings.warn("No valid choices were provided for ranking methods.")
-    else:
-        print("Feature ranking completed successfully.")
+    logger.info("Feature ranking completed.")
 
     if save:
         if save_path is None:
-            # Create a default filename based on task and current timestamp
-            from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             save_path = f"feature_rankings_{task}_{timestamp}.pkl"
-        with open(save_path, 'wb') as f:
+        with open(save_path, "wb") as f:
             pickle.dump(rankings, f)
-        print(f"Rankings saved to {save_path}")
+        logger.info("Rankings saved to %s", save_path)
 
     return rankings
 
 
 def voting(
-    rankings: List[Tuple[str, pd.DataFrame]],
-    weights: Optional[List[float]] = None,
+    rankings: list[tuple[str, pd.DataFrame]],
+    weights: list[float] | None = None,
+    method: str = "reciprocal_rank",
     save: bool = False,
-    save_path: Optional[str] = None,
-    **kwargs,
+    save_path: str | None = None,
 ) -> pd.DataFrame:
-    """
-    Aggregate feature rankings using a weighted voting scheme.
+    """Aggregate feature rankings using a weighted voting scheme.
 
-    Parameters:
-        rankings (List[Tuple[str, pd.DataFrame]]): List of tuples containing method names and their rankings.
-        weights (List[float]): List of weights corresponding to each ranking method.
-        save (bool): Whether to save the aggregated ranking to a pickle file.
-        save_path (str): Path to save the pickle file. If None, a default name is used.
+    Args:
+        rankings: List of (method_name, ranking_df) tuples from feature_ranking().
+        weights: Weight per ranking method. Default: equal weights (1.0 each).
+        method: Voting method. Options:
+            'reciprocal_rank' (default): weight * (1 / rank)
+            'borda': weight * (n_features - rank)
+            'exponential': weight * exp(-rank / n_features)
+        save: Save result to CSV.
+        save_path: Path for CSV file.
 
     Returns:
-        pd.DataFrame: DataFrame containing features and their aggregated scores.
+        DataFrame with 'Feature' and 'Score' columns, sorted by score descending.
     """
+    assert rankings, "Rankings list is empty."
+    valid_methods = {"reciprocal_rank", "borda", "exponential"}
+    assert method in valid_methods, f"Invalid method: {method}. Use one of {valid_methods}"
+
     if weights is None:
         weights = [1.0] * len(rankings)
-    else:
-        if len(weights) != len(rankings):
-            raise ValueError("Length of weights must match the number of rankings.")
+    assert len(weights) == len(rankings), (
+        f"Length mismatch: {len(weights)} weights vs {len(rankings)} rankings."
+    )
 
-    score_dict = {}
+    score_dict: dict[str, float] = defaultdict(float)
+
     for (method_name, ranking_df), weight in zip(rankings, weights):
         feature_list = ranking_df[method_name].tolist()
+        n_features = len(feature_list)
         for rank, feature in enumerate(feature_list, start=1):
-            score = weight * (1 / rank)  # Higher rank contributes more
-            score_dict[feature] = score_dict.get(feature, 0) + score
+            if method == "reciprocal_rank":
+                score = weight * (1.0 / rank)
+            elif method == "borda":
+                score = weight * (n_features - rank)
+            else:  # exponential
+                score = weight * math.exp(-rank / n_features)
+            score_dict[feature] += score
 
     final_ranking = (
         pd.DataFrame.from_dict(score_dict, orient="index", columns=["Score"])
@@ -325,11 +311,9 @@ def voting(
 
     if save:
         if save_path is None:
-            # Create a default filename based on current timestamp
-            from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             save_path = f"aggregated_ranking_{timestamp}.csv"
         final_ranking.to_csv(save_path, index=False)
-        print(f"Aggregated ranking saved to {save_path}")
+        logger.info("Aggregated ranking saved to %s", save_path)
 
     return final_ranking

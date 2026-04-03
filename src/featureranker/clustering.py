@@ -4,38 +4,64 @@ from sklearn.datasets import make_blobs
 from sklearn.metrics import silhouette_score
 
 
-def random_cluster_generator(n_samples=1000, n_features=2, n_centers=3, std=1.0):
-    return make_blobs(n_samples=n_samples, n_features=n_features, centers=n_centers, cluster_std=std)[0]
+def random_cluster_generator(
+    n_samples: int = 1000,
+    n_features: int = 2,
+    n_centers: int = 3,
+    std: float = 1.0,
+) -> np.ndarray:
+    """Generate random clustered data using make_blobs."""
+    return make_blobs(
+        n_samples=n_samples,
+        n_features=n_features,
+        centers=n_centers,
+        cluster_std=std,
+        random_state=42,
+    )[0]
 
 
-def get_inertia(X, k):
-    return KMeans(n_clusters=k).fit(X).inertia_
+def get_inertia(X: np.ndarray, k: int) -> float:
+    """Compute within-cluster sum of squares for a given k."""
+    return KMeans(n_clusters=k, n_init=10, random_state=42).fit(X).inertia_
 
 
-def optimal_k_w_elbow(X, max_k=10):
-    inertias = np.array([get_inertia(X, k) for k in range(1, max_k+1)])
-    slope = (inertias[max_k-1] - inertias[0]) / (max_k - 1)
-    linear = np.array([slope * (x) + (inertias[max_k-1] - slope * max_k) for x in range(1, max_k+1)])
-    return (linear-inertias).argmax(axis=0)+1
+def optimal_k_w_elbow(X: np.ndarray, max_k: int = 10) -> int:
+    """Find optimal k using the elbow method (max distance from baseline)."""
+    assert max_k >= 2, f"max_k must be >= 2, got {max_k}"
+    inertias = np.array([get_inertia(X, k) for k in range(1, max_k + 1)])
+    slope = (inertias[-1] - inertias[0]) / (max_k - 1)
+    linear = np.array([
+        slope * x + (inertias[-1] - slope * max_k)
+        for x in range(1, max_k + 1)
+    ])
+    return int((linear - inertias).argmax() + 1)
 
 
-def get_kmean_metrics(X, k):
-    kmeans = KMeans(n_clusters=k)
+def get_kmean_metrics(X: np.ndarray, k: int) -> tuple[float, float]:
+    """Return (inertia, silhouette_score) for a given k."""
+    kmeans = KMeans(n_clusters=k, n_init=10, random_state=42)
     kmeans.fit(X)
     inertia = kmeans.inertia_
+    if k < 2:
+        return inertia, 0.0
     try:
-        silhouette = silhouette_score(X, kmeans.labels_)
-    except:
-        silhouette = 0
-    return inertia, silhouette
+        sil = silhouette_score(X, kmeans.labels_)
+    except ValueError:
+        sil = 0.0
+    return inertia, sil
 
 
-def optimal_k_w_both(X, max_k=10):
-    metrics = [get_kmean_metrics(X, k) for k in range(1, max_k+1)]
-    inertias = np.array([metric[0] for metric in metrics])
-    slope = (inertias[max_k-1] - inertias[0]) / (max_k - 1)
-    linear = np.array([slope * (x) + (inertias[max_k-1] - slope * max_k) for x in range(1, max_k+1)])
+def optimal_k_w_both(X: np.ndarray, max_k: int = 10) -> int:
+    """Find optimal k using combined elbow + silhouette scoring."""
+    assert max_k >= 2, f"max_k must be >= 2, got {max_k}"
+    metrics = [get_kmean_metrics(X, k) for k in range(1, max_k + 1)]
+    inertias = np.array([m[0] for m in metrics])
+    sils = np.array([m[1] for m in metrics])
+    slope = (inertias[-1] - inertias[0]) / (max_k - 1)
+    linear = np.array([
+        slope * x + (inertias[-1] - slope * max_k)
+        for x in range(1, max_k + 1)
+    ])
     dists = linear - inertias
-    sils = np.array([metric[1] for metric in metrics])
-    scores = np.array([d * s for d, s in zip(dists, sils)])
-    return scores.argmax()+1
+    scores = dists * sils
+    return int(scores.argmax() + 1)

@@ -1,304 +1,176 @@
-import pandas as pd
-import numpy as np
+import logging
 import re
-from typing import List, Tuple, Dict, Optional
-from sklearn.model_selection import cross_val_predict
+
+import numpy as np
+import pandas as pd
+from scipy.stats import randint, uniform
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier, XGBRegressor
-from scipy.stats import spearmanr
-from skopt import BayesSearchCV
-from .plots import plot_confusion_matrix, plot_correlations
+
+logger = logging.getLogger(__name__)
 
 
-model_params = {
-    "classification": {
-        "XGBoost": {
-            "model": XGBClassifier(use_label_encoder=False, eval_metric="logloss"),
-            "params": {
-                "max_depth": (3, 50),
-                "min_child_weight": (1, 10),
-                "gamma": (0.0, 0.5),
-                "subsample": (0.5, 1.0),
-                "colsample_bytree": (0.5, 1.0),
-                "learning_rate": (0.01, 0.5, "log-uniform"),
-                "n_estimators": (100, 1000),
-                "reg_alpha": (0.1, 100, "log-uniform"),
-                "reg_lambda": (0.1, 100, "log-uniform"),
-            },
-        },
-        "RandomForest": {
-            "model": RandomForestClassifier(),
-            "params": {
-                "n_estimators": (10, 1000),
-                "max_features": ["sqrt", "log2", None],
-                "max_depth": (10, 100),
-                "min_samples_split": (2, 10),
-                "min_samples_leaf": (1, 4),
-                "bootstrap": [True, False],
-            },
-        },
-    },
-    "regression": {
-        "XGBoost": {
-            "model": XGBRegressor(),
-            "params": {
-                "max_depth": (3, 50),
-                "min_child_weight": (1, 10),
-                "gamma": (0.0, 0.5),
-                "subsample": (0.5, 1.0),
-                "colsample_bytree": (0.5, 1.0),
-                "learning_rate": (0.01, 0.5, "log-uniform"),
-                "n_estimators": (100, 1000),
-                "reg_alpha": (0.1, 100, "log-uniform"),
-                "reg_lambda": (0.1, 100, "log-uniform"),
-            },
-        },
-        "RandomForest": {
-            "model": RandomForestRegressor(),
-            "params": {
-                "n_estimators": (10, 1000),
-                "max_features": ["sqrt", "log2", None],
-                "max_depth": (10, 100),
-                "min_samples_split": (2, 10),
-                "min_samples_leaf": (1, 4),
-                "bootstrap": [True, False],
-            },
-        },
-    },
-}
+def _get_search_config(model_name: str, task: str) -> tuple:
+    """Return (estimator, param_distributions) for RandomizedSearchCV."""
+    rf_params = {
+        "n_estimators": randint(10, 1000),
+        "max_features": ["sqrt", "log2", None],
+        "max_depth": randint(10, 100),
+        "min_samples_split": randint(2, 10),
+        "min_samples_leaf": randint(1, 4),
+        "bootstrap": [True, False],
+    }
+    xgb_params = {
+        "max_depth": randint(3, 50),
+        "min_child_weight": randint(1, 10),
+        "gamma": uniform(0.0, 0.5),
+        "subsample": uniform(0.5, 0.5),
+        "colsample_bytree": uniform(0.5, 0.5),
+        "learning_rate": uniform(0.01, 0.49),
+        "n_estimators": randint(100, 1000),
+        "reg_alpha": uniform(0.1, 99.9),
+        "reg_lambda": uniform(0.1, 99.9),
+    }
+
+    if model_name == "RandomForest":
+        if task == "classification":
+            return RandomForestClassifier(random_state=42), rf_params
+        return RandomForestRegressor(random_state=42), rf_params
+    elif model_name == "XGBoost":
+        if task == "classification":
+            return XGBClassifier(eval_metric="logloss", random_state=42), xgb_params
+        return XGBRegressor(random_state=42), xgb_params
+    else:
+        raise ValueError(f"Unknown model: {model_name}. Use 'RandomForest' or 'XGBoost'.")
 
 
 def sanitize_column_names(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Replace unwanted characters in column names with underscores.
-
-    Parameters:
-        df (pd.DataFrame): DataFrame with columns to sanitize.
-
-    Returns:
-        pd.DataFrame: DataFrame with sanitized column names.
-    """
+    """Replace non-word characters in column names with underscores."""
+    df = df.copy()
     df.columns = [re.sub(r"[^\w]", "_", col) for col in df.columns]
     return df
 
 
-def view_data(df: pd.DataFrame) -> None:
-    """
-    Display the percentage of NaN values in each column of the DataFrame.
-
-    Parameters:
-        df (pd.DataFrame): The DataFrame to inspect.
-
-    Returns:
-        None
-    """
-    has_nans = False
-    for column in df.columns:
-        nan_count = df[column].isna().sum()
-        nan_percentage = round(nan_count / len(df) * 100, 1)
-        if nan_percentage > 0:
-            has_nans = True
-            print(f"The column {column} has {nan_percentage}% NaN values.")
-    if not has_nans:
-        print("There are no NaN values in the dataset.")
+def view_data(df: pd.DataFrame) -> pd.Series:
+    """Return percentage of NaN values per column. Only includes columns with NaNs."""
+    nan_pct = (df.isna().sum() / len(df) * 100).round(1)
+    nan_pct = nan_pct[nan_pct > 0]
+    if nan_pct.empty:
+        logger.info("No NaN values in the dataset.")
+    else:
+        for col, pct in nan_pct.items():
+            logger.info("Column %s has %.1f%% NaN values.", col, pct)
+    return nan_pct
 
 
 def get_data(
     df: pd.DataFrame,
     target: str,
     thresh: float = 0.8,
-    columns_to_drop: Optional[List[str]] = None,
-    n_rows: Optional[int] = None,
-) -> Tuple[pd.DataFrame, pd.Series]:
+    columns_to_drop: list[str] | None = None,
+    n_rows: int | None = None,
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Prepare dataset by cleaning and encoding features.
+
+    Steps:
+        1. Drop specified columns
+        2. Drop columns with more than (1-thresh)*100% missing values
+        3. Drop rows with remaining NaNs
+        4. Optionally shuffle and sample n_rows
+        5. Remove constant columns
+        6. Label-encode categorical/string/bool columns
     """
-    Prepare the dataset by cleaning and encoding features.
+    df = df.copy()
 
-    Features added:
-        1. Removes columns with constant values and prints their names.
-        2. Shuffles the dataset and returns a specified number of rows if `n_rows` is provided.
-
-    Parameters:
-        df (pd.DataFrame): The original DataFrame.
-        target (str): The target column name.
-        thresh (float): Threshold for dropping columns with missing values (default is 0.8).
-        columns_to_drop (List[str], optional): List of columns to drop (default is None).
-        n_rows (int, optional): If specified, shuffle and return this number of rows (default is None).
-
-    Returns:
-        Tuple[pd.DataFrame, pd.Series]: Feature matrix and target vector.
-
-    Raises:
-        ValueError: If specified columns to drop are not in the DataFrame.
-        ValueError: If the target column is not found in the DataFrame.
-        ValueError: If `n_rows` is greater than the available rows after cleaning.
-    """
-    # Drop specified columns if any
     if columns_to_drop:
         missing_cols = set(columns_to_drop) - set(df.columns)
-        if missing_cols:
-            raise ValueError(f"Columns not found in DataFrame: {missing_cols}")
+        assert not missing_cols, f"Columns not found in DataFrame: {missing_cols}"
         df = df.drop(columns=columns_to_drop)
-        print(f"Dropped columns: {columns_to_drop}")
+        logger.info("Dropped columns: %s", columns_to_drop)
 
-    # Ensure target column exists
-    if target not in df.columns:
-        raise ValueError(f"Target column '{target}' not found in DataFrame.")
+    assert target in df.columns, f"Target column '{target}' not found in DataFrame."
 
     y = df[target]
     df_clean = df.drop(columns=[target])
 
-    # Drop columns with missing values below the threshold
-    threshold = thresh * len(df_clean)
+    threshold = int(thresh * len(df_clean))
     df_clean = df_clean.dropna(axis=1, thresh=threshold)
-    print(f"Column count after dropping those with > {thresh*100}% missing values: {len(df_clean.columns)}")
+    logger.info(
+        "Column count after dropping those with >%.0f%% missing: %d",
+        (1 - thresh) * 100,
+        len(df_clean.columns),
+    )
 
-    # Combine features and target to drop rows with any remaining NaNs
-    combined = pd.concat([df_clean, y], axis=1)
-    combined_clean = combined.dropna()
-    df_clean = combined_clean[df_clean.columns]
-    y = combined_clean[target]
+    combined = pd.concat([df_clean, y], axis=1).dropna()
+    df_clean = combined[df_clean.columns]
+    y = combined[target]
 
-    # Shuffle and sample rows if n_rows is specified
     if n_rows is not None:
-        total_rows = len(df_clean)
-        if n_rows > total_rows:
-            raise ValueError(f"Requested number of rows ({n_rows}) exceeds available rows ({total_rows}).")
-        combined_clean = combined_clean.sample(n=n_rows, random_state=42).reset_index(drop=True)
-        df_clean = combined_clean[df_clean.columns]
-        y = combined_clean[target].reset_index(drop=True)
-        print(f"Shuffled and sampled {n_rows} rows from the dataset.")
+        assert n_rows <= len(df_clean), (
+            f"Requested {n_rows} rows but only {len(df_clean)} available."
+        )
+        combined = combined.sample(n=n_rows, random_state=42).reset_index(drop=True)
+        df_clean = combined[df_clean.columns]
+        y = combined[target].reset_index(drop=True)
+        logger.info("Shuffled and sampled %d rows.", n_rows)
 
-    # Remove constant columns
     constant_columns = [col for col in df_clean.columns if df_clean[col].nunique() == 1]
     if constant_columns:
         df_clean = df_clean.drop(columns=constant_columns)
-        print(f"Removed constant columns: {constant_columns}")
-    else:
-        print("No constant columns found.")
+        logger.info("Removed constant columns: %s", constant_columns)
 
-    # Encode categorical columns
     le = LabelEncoder()
     columns_to_encode = df_clean.select_dtypes(include=["object", "string", "bool"]).columns.tolist()
     for column in columns_to_encode:
         df_clean[column] = le.fit_transform(df_clean[column])
-        print(f"Encoded column: {column}")
+        logger.info("Encoded column: %s", column)
 
-    X = df_clean
-
-    # Convert boolean target to integer if necessary
     if y.dtype == "bool":
         y = y.astype(int)
-        print("Converted boolean target to integer.")
 
-    return X, y
-
-
-def spearman_scoring_function(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Custom scoring function for Spearman correlation.
-
-    Parameters:
-        y_true (np.ndarray): True target values.
-        y_pred (np.ndarray): Predicted target values.
-
-    Returns:
-        float: Spearman correlation coefficient.
-    """
-    return spearmanr(y_true, y_pred)[0]
+    return df_clean, y
 
 
-def regression_hyper_param_search(
+def hyper_param_search(
     X: pd.DataFrame,
     y: pd.Series,
     model_name: str,
+    task: str,
     cv: int = 3,
     n_iter: int = 5,
-    verbose: int = 2,
     n_jobs: int = -1,
-    model_params: Dict = model_params,
-    save: bool = False,
-    predict: bool = True,
-) -> Dict:
-    """
-    Perform hyperparameter optimization for regression models using Bayesian optimization.
+    verbose: int = 0,
+) -> dict:
+    """Hyperparameter search using RandomizedSearchCV.
 
-    Parameters:
-        X (pd.DataFrame): Feature matrix.
-        y (pd.Series): Target vector.
-        model_name (str): Name of the regression model.
-        cv (int): Number of cross-validation folds.
-        n_iter (int): Number of iterations for the search.
-        verbose (int): Verbosity level.
+    Args:
+        X: Feature matrix.
+        y: Target vector.
+        model_name: 'RandomForest' or 'XGBoost'.
+        task: 'classification' or 'regression'.
+        cv: Number of cross-validation folds.
+        n_iter: Number of parameter settings sampled.
+        n_jobs: Number of parallel jobs (-1 for all cores).
+        verbose: Verbosity level for RandomizedSearchCV.
 
     Returns:
-        Dict: Best hyperparameters found.
+        Best hyperparameters found.
     """
-    mp = model_params["regression"][model_name]
-    opt = BayesSearchCV(
-        estimator=mp["model"],
-        search_spaces=mp["params"],
+    estimator, param_distributions = _get_search_config(model_name, task)
+    scoring = "accuracy" if task == "classification" else "neg_mean_squared_error"
+
+    search = RandomizedSearchCV(
+        estimator=estimator,
+        param_distributions=param_distributions,
         n_iter=n_iter,
         cv=cv,
-        scoring="neg_mean_squared_error",
+        scoring=scoring,
         n_jobs=n_jobs,
         verbose=verbose,
         random_state=42,
     )
-    opt.fit(X, y)
-    if predict:
-        predictions = cross_val_predict(opt.best_estimator_, X, y, cv=cv, n_jobs=-1)
-        plot_correlations(predictions, y, model_name, save=save)
-    return opt.best_params_
-
-
-def classification_hyper_param_search(
-    X: pd.DataFrame,
-    y: pd.Series,
-    model_name: str,
-    cv: int = 3,
-    n_iter: int = 5,
-    verbose: int = 2,
-    n_jobs: int = -1,
-    model_params: Dict = model_params,
-    save: bool = False,
-    predict: bool = True,
-) -> Dict:
-    """
-    Perform hyperparameter optimization for classification models using Bayesian optimization.
-
-    Parameters:
-        X (pd.DataFrame): Feature matrix.
-        y (pd.Series): Target vector.
-        model_name (str): Name of the classification model.
-        cv (int): Number of cross-validation folds.
-        n_iter (int): Number of iterations for the search.
-        verbose (int): Verbosity level.
-
-    Returns:
-        Dict: Best hyperparameters found.
-    """
-    mp = model_params["classification"][model_name]
-    opt = BayesSearchCV(
-        estimator=mp["model"],
-        search_spaces=mp["params"],
-        n_iter=n_iter,
-        cv=cv,
-        scoring="accuracy",
-        n_jobs=n_jobs,
-        verbose=verbose,
-        random_state=42,
-    )
-    opt.fit(X, y)
-    if predict:
-        predictions = cross_val_predict(opt.best_estimator_, X, y, cv=cv, n_jobs=n_jobs)
-        acc = accuracy_score(y, predictions)
-        cm = confusion_matrix(y, predictions)
-        plot_confusion_matrix(
-            cm,
-            title=f"Confusion matrix for {model_name} with {round(acc, 3)} accuracy",
-            labels=np.unique(y),
-            save=save,
-        )
-    return opt.best_params_
+    search.fit(X, y)
+    logger.info("%s %s best params: %s", model_name, task, search.best_params_)
+    return search.best_params_
