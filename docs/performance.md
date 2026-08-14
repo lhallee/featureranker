@@ -73,9 +73,31 @@ this, including `n_jobs=1` against `n_jobs=4`.
 
 ## Benchmarks
 
-Run `python bench/bench_rankers.py --scenario small` (also `tall-cls`,
+Run `python bench/bench_rankers.py --scenario small-cls` (also `tall-cls`,
 `tall-reg`, `wide-cls`, `wide-reg`; `--scale` grows the shapes) to time the
-methods on synthetic data with known informative features. Results for this
-repository's reference machine land in the table below when generated.
+methods on synthetic data with known informative features.
 
-<!-- BENCHMARK TABLE: populated by bench/bench_rankers.py output -->
+Measured 2026-08-14 on a 16-core AMD Zen 2 desktop (Windows 10, Python
+3.11.9, scikit-learn 1.8.0, xgboost 3.2.0, identical pinned dependencies in
+both environments). v2 rows use its best mode (`n_jobs=1`; its `n_jobs=-1`
+was slower, 5.6s vs 5.1s for the small ensemble, because of the nested
+parallelism it triggered). v3 rows use `n_jobs=-1`. Seconds per method:
+
+| scenario | method | v2.0.0 | v3.0.0 | speedup |
+|---|---|---|---|---|
+| 20,000 x 500 | l1 | 236.6 | 8.3 | 28x |
+| 20,000 x 500 | mi | 36.9 | 4.0 | 9.2x |
+| 20,000 x 500 | rf + xg | not finished in 600 | 167.0 | > 3.6x |
+| 20,000 x 500 | full ensemble | not finished in 600 | 171.8 | > 3.5x |
+| 2,000 x 5,000 | l1 | not finished in 300 | 9.0 | > 33x |
+| 2,000 x 5,000 | mi | 30.6 | 3.5 | 8.7x |
+| 2,000 x 5,000 | rf | 347.0 | 225.7 | 1.5x |
+| 2,000 x 5,000 | xg | 180.7 | 138.3 | 1.3x |
+| 500 x 50 | full ensemble | 5.1 | 3.4 | 1.5x |
+
+Two caveats the table earns honestly: the v3 tree searches explore 27
+hyperparameter candidates against v2's 5, so their speedups understate the
+per-candidate gain; and on tiny data with `n_jobs=1` the v3 rf search is
+slower than v2's (13.8s vs 3.8s on 500 x 50) because that exploration has
+nothing to parallelize against, which is the price of the better search at
+sizes where either finishes in seconds.
