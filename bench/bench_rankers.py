@@ -49,11 +49,12 @@ def build_scenario(name: str, scale: float) -> tuple[pd.DataFrame, pd.Series, st
 
 
 def rank(X: pd.DataFrame, y: pd.Series, task: str, methods: list[str], n_jobs: int):
-    if featureranker.__version__.startswith("2."):
+    # detect the API by capability, not version string
+    if hasattr(featureranker, "RankingResult"):
         return featureranker.feature_ranking(
-            X, y, task=task, choices=methods, n_jobs=n_jobs
+            X, y, task=task, methods=methods, n_jobs=n_jobs
         )
-    return featureranker.feature_ranking(X, y, task=task, methods=methods, n_jobs=n_jobs)
+    return featureranker.feature_ranking(X, y, task=task, choices=methods, n_jobs=n_jobs)
 
 
 def main() -> None:
