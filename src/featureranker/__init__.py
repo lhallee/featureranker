@@ -1,44 +1,40 @@
-"""featureranker - Feature ranking ensemble using multiple methods with weighted voting."""
+"""featureranker: ensemble feature ranking with weighted voting."""
 
 __version__ = "2.0.0"
 
+from .data import get_data, sanitize_column_names, view_data
+from .lasso import LassoOptions
+from .logistic import LogisticL1Options
 from .plots import (
     plot_after_vote,
     plot_confusion_matrix,
     plot_correlations,
     plot_rankings,
 )
-from .rankers import (
-    VALID_CHOICES,
-    feature_ranking,
-    l1_classification_ranking,
-    l1_regression_ranking,
-    make_ranking,
-    voting,
-)
-from .utils import (
-    get_data,
-    hyper_param_search,
-    sanitize_column_names,
-    view_data,
-)
+from .ranking import METHODS, feature_ranking
+from .result import RankingResult
+from .trees import TreeSearchOptions
+from .univariate import MutualInfoOptions
+from .vote import voting
 
 __all__ = [
-    # rankers
+    # ranking
     "feature_ranking",
+    "RankingResult",
     "voting",
-    "make_ranking",
-    "l1_regression_ranking",
-    "l1_classification_ranking",
-    "VALID_CHOICES",
-    # utils
+    "METHODS",
+    # options
+    "LassoOptions",
+    "LogisticL1Options",
+    "TreeSearchOptions",
+    "MutualInfoOptions",
+    # data preparation
     "get_data",
     "view_data",
     "sanitize_column_names",
-    "hyper_param_search",
     # plots
+    "plot_rankings",
+    "plot_after_vote",
     "plot_correlations",
     "plot_confusion_matrix",
-    "plot_after_vote",
-    "plot_rankings",
 ]
