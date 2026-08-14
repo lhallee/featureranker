@@ -1,8 +1,11 @@
 # featureranker
 
-A lightweight Python package for robust feature importance ranking using an ensemble of methods with weighted voting.
+[![Tests](https://github.com/lhallee/featureranker/actions/workflows/tests.yml/badge.svg)](https://github.com/lhallee/featureranker/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/featureranker)](https://pypi.org/project/featureranker/)
 
-The ensemble combines L1 penalization, random forests, XGBoost, ANOVA F-scores, and mutual information to rank feature importance for both classification and regression tasks.
+Ensemble feature ranking for tabular machine learning. Five methods rank
+every feature, a typed result object holds the evidence, and weighted rank
+voting produces one consensus ordering, for classification and regression.
 
 Featured in:
 
@@ -15,87 +18,57 @@ Featured in:
 pip install featureranker
 ```
 
-## Quick Start
+Requires Python >= 3.11.
+
+## Quick start
 
 ```python
 from sklearn.datasets import load_breast_cancer
-from featureranker import get_data, feature_ranking, voting
-from featureranker.plots import plot_after_vote, plot_rankings
+from featureranker import feature_ranking, voting, plot_rankings, plot_after_vote
 
-# Load and prepare data
 cancer = load_breast_cancer(as_frame=True)
-df = cancer.data.merge(cancer.target, left_index=True, right_index=True)
-X, y = get_data(df, target="target")
+result = feature_ranking(cancer.data, cancer.target, task="classification")
 
-# Rank features using all five methods
-rankings = feature_ranking(X, y, task="classification")
-
-# Aggregate with weighted voting
-scoring = voting(rankings)
-
-# Visualize
-plot_rankings(rankings, title="All methods")
-plot_after_vote(scoring, title="Ensemble ranking")
+vote_table = voting(result)                # ["feature", "score"], best first
+plot_rankings(result, top_n=15)            # per-method ranks as a dot plot
+plot_after_vote(vote_table, top_n=15)      # consensus scores
 ```
 
-### Parallel execution
+`feature_ranking` returns a `RankingResult` with per-method ranking tables,
+rank and score matrices, diagnostics, and save/load. Results are
+deterministic for a given `random_state` at any `n_jobs`.
 
-Speed up ranking by running methods in parallel:
+## Ranking methods
 
-```python
-rankings = feature_ranking(X, y, task="classification", n_jobs=-1)
-```
-
-### Custom method selection and weights
-
-```python
-rankings = feature_ranking(X, y, task="classification", choices=["mi", "f_test", "l1"])
-scoring = voting(rankings, weights=[0.2, 0.4, 0.4])
-```
-
-### Voting methods
-
-Three aggregation schemes are available:
-
-```python
-scoring = voting(rankings, method="reciprocal_rank")  # default: weight * (1/rank)
-scoring = voting(rankings, method="borda")             # weight * (n_features - rank)
-scoring = voting(rankings, method="exponential")       # weight * exp(-rank / n_features)
-```
-
-### Regression
-
-```python
-from sklearn.datasets import load_diabetes
-
-diabetes = load_diabetes(as_frame=True)
-df = diabetes.data.merge(diabetes.target, left_index=True, right_index=True)
-X, y = get_data(df, target="target")
-rankings = feature_ranking(X, y, task="regression")
-scoring = voting(rankings)
-```
-
-## Ranking Methods
-
-| Key | Method | How it works |
-|-----|--------|-------------|
-| `rf` | Random Forest | Feature importances from a tuned RandomForest model |
-| `xg` | XGBoost | Feature importances from a tuned XGBoost model |
-| `mi` | Mutual Information | Statistical dependency between each feature and target |
-| `f_test` | ANOVA F-test | Variance-based scoring (f_classif / f_regression) |
-| `l1` | L1 Regularization | Regularization path analysis (lasso / logistic L1) |
+| Key | Method | Score |
+|-----|--------|-------|
+| `rf` | Random forest | Impurity importance from a halving-search-tuned forest |
+| `xg` | XGBoost | Gain importance from a halving-search-tuned booster |
+| `mi` | Mutual information | kNN-estimated dependency with the target |
+| `f_test` | ANOVA F-test | Between/within variance ratio |
+| `l1` | L1 regularization path | Entry point on the lasso / L1 logistic path |
 
 ## Documentation
 
-See the full [API documentation](https://github.com/lhallee/feature-ranker/tree/main/documentation) and [example notebook](https://github.com/lhallee/feature-ranker/blob/main/example_usage.ipynb).
+| Topic | Page |
+|---|---|
+| Install and first run | [docs/quickstart.md](docs/quickstart.md) |
+| The math behind each method and the voting schemes | [docs/algorithms.md](docs/algorithms.md) |
+| Speed, the n_jobs core budget, determinism | [docs/performance.md](docs/performance.md) |
+| Every signature and exception | [docs/api.md](docs/api.md) |
+| Upgrading from v2 | [docs/migration_v2_to_v3.md](docs/migration_v2_to_v3.md) |
+| Development and releases | [docs/contributing.md](docs/contributing.md) |
+
+The [example notebook](example_usage.ipynb) walks through classification and
+regression end to end.
 
 ## Development
 
 ```bash
-git clone https://github.com/lhallee/feature-ranker.git
-cd feature-ranker
+git clone https://github.com/lhallee/featureranker.git
+cd featureranker
 pip install -e ".[dev]"
-pytest tests/ -v
+pytest
 ```
 
 ## Citation
@@ -130,4 +103,4 @@ pytest tests/ -v
 
 ## License
 
-CC-BY-NC-SA-4.0
+MIT

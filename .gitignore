@@ -14,4 +14,5 @@ venv/
 .ipynb_checkpoints/
 *.csv
 *.pkl
+*.joblib
 *.png
