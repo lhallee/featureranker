@@ -7,10 +7,11 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import fields
-from sklearn.preprocessing import LabelEncoder
 from typing import Literal
+
+from sklearn.preprocessing import LabelEncoder
 
 from .lasso import LassoOptions, rank_lasso
 from .logistic import LogisticL1Options, rank_logistic_l1
@@ -22,8 +23,10 @@ logger = logging.getLogger(__name__)
 
 METHODS: tuple[str, ...] = ("rf", "xg", "mi", "f_test", "l1")
 
+RankerFn = Callable[..., tuple[np.ndarray, dict[str, object]]]
+
 # task-independent methods: key -> (ranker, options dataclass or None)
-_REGISTRY: dict[str, tuple[object, type | None]] = {
+_REGISTRY: dict[str, tuple[RankerFn, type | None]] = {
     "rf": (rank_random_forest, TreeSearchOptions),
     "xg": (rank_xgboost, TreeSearchOptions),
     "mi": (rank_mutual_info, MutualInfoOptions),
@@ -31,7 +34,7 @@ _REGISTRY: dict[str, tuple[object, type | None]] = {
 }
 
 
-def _method_spec(method: str, task: str) -> tuple[object, type | None]:
+def _method_spec(method: str, task: str) -> tuple[RankerFn, type | None]:
     """Resolve the ranker and options type; l1 depends on the task."""
     if method == "l1":
         if task == "regression":

@@ -12,9 +12,10 @@ import warnings
 import numpy as np
 
 from dataclasses import dataclass
+from typing import Literal
+
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import lars_path_gram, lasso_path
-from typing import Literal
 
 logger = logging.getLogger(__name__)
 

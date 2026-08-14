@@ -1,11 +1,14 @@
 """Ranking result container and the shared ranking-table schema."""
 
+import warnings
+
 import joblib
 import numpy as np
 import pandas as pd
 
 from dataclasses import dataclass
 from pathlib import Path
+
 from scipy.stats import rankdata
 
 
@@ -94,6 +97,8 @@ class RankingResult:
     @classmethod
     def load(cls, path: str | Path) -> "RankingResult":
         """Load a saved result; warn when the package version differs."""
+        # deserialization boundary: any failure mode maps onto the documented
+        # ValueError contract
         try:
             loaded = joblib.load(path)
         except Exception as error:
@@ -104,8 +109,6 @@ class RankingResult:
         from . import __version__
 
         if loaded.version != __version__:
-            import warnings
-
             warnings.warn(
                 f"Result was saved by featureranker {loaded.version}, "
                 f"loading under {__version__}.",

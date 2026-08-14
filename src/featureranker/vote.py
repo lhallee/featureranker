@@ -4,8 +4,9 @@ import numpy as np
 import pandas as pd
 
 from collections.abc import Mapping
-from scipy.stats import rankdata
 from typing import Literal
+
+from scipy.stats import rankdata
 
 from .result import RankingResult, make_table
 

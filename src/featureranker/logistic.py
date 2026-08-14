@@ -13,10 +13,11 @@ import logging
 import numpy as np
 
 from dataclasses import dataclass
+from typing import Literal
+
 from joblib import Parallel, delayed
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import l1_min_c
-from typing import Literal
 
 logger = logging.getLogger(__name__)
 
