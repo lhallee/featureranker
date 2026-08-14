@@ -9,6 +9,7 @@ from .plots import (
     plot_after_vote,
     plot_confusion_matrix,
     plot_correlations,
+    plot_rank_heatmap,
     plot_rankings,
 )
 from .ranking import METHODS, feature_ranking
@@ -34,6 +35,7 @@ __all__ = [
     "sanitize_column_names",
     # plots
     "plot_rankings",
+    "plot_rank_heatmap",
     "plot_after_vote",
     "plot_correlations",
     "plot_confusion_matrix",

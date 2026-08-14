@@ -9,6 +9,7 @@ from featureranker.plots import (
     plot_after_vote,
     plot_confusion_matrix,
     plot_correlations,
+    plot_rank_heatmap,
     plot_rankings,
 )
 from featureranker.ranking import feature_ranking
@@ -60,6 +61,17 @@ def test_plot_rankings_from_result(univariate_result):
 def test_plot_rankings_top_n(univariate_result):
     ax = plot_rankings(univariate_result, top_n=5, show=False)
     assert len(ax.get_yticklabels()) == 5
+
+
+def test_plot_rank_heatmap(univariate_result):
+    ax = plot_rank_heatmap(univariate_result, show=False)
+    assert isinstance(ax, plt.Axes)
+    assert len(ax.get_yticklabels()) == univariate_result.n_features
+
+
+def test_plot_rank_heatmap_top_n(univariate_result):
+    ax = plot_rank_heatmap(univariate_result, top_n=4, show=False)
+    assert len(ax.get_yticklabels()) == 4
 
 
 def test_plot_rankings_save(univariate_result, tmp_path):
