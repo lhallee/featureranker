@@ -2,13 +2,6 @@
 
 __version__ = "2.0.0"
 
-from .clustering import (
-    get_inertia,
-    get_kmean_metrics,
-    optimal_k_w_both,
-    optimal_k_w_elbow,
-    random_cluster_generator,
-)
 from .plots import (
     plot_after_vote,
     plot_confusion_matrix,
@@ -48,10 +41,4 @@ __all__ = [
     "plot_confusion_matrix",
     "plot_after_vote",
     "plot_rankings",
-    # clustering
-    "random_cluster_generator",
-    "get_inertia",
-    "optimal_k_w_elbow",
-    "get_kmean_metrics",
-    "optimal_k_w_both",
 ]
