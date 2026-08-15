@@ -1,49 +1,63 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "featureranker"
-version = "2.0.0"
-description = "Feature ranking ensemble using L1 penalization, random forests, XGBoost, ANOVA F-scores, and mutual information"
+dynamic = ["version"]
+description = "Feature ranking ensemble using L1 paths, random forests, XGBoost, ANOVA F-scores, and mutual information"
 readme = "README.md"
-license = "CC-BY-NC-SA-4.0"
-requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
 authors = [
     { name = "Logan Hallee", email = "lhallee99@gmail.com" },
 ]
 keywords = ["feature-ranking", "feature-selection", "sklearn", "ensemble", "machine-learning"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
 dependencies = [
-    "pandas>=2.0.0",
-    "numpy>=1.24.0",
-    "scikit-learn>=1.3.0",
-    "matplotlib>=3.7.0",
-    "seaborn>=0.12.0",
-    "scipy>=1.10.0",
-    "xgboost>=1.7.0",
-    "joblib>=1.2.0",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scikit-learn>=1.8",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "xgboost>=2.0",
+    "joblib>=1.3",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0",
-    "pytest-cov",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
 ]
 
 [project.urls]
-Repository = "https://github.com/lhallee/feature-ranker"
+Repository = "https://github.com/lhallee/featureranker"
+Documentation = "https://github.com/lhallee/featureranker/tree/main/docs"
+Issues = "https://github.com/lhallee/featureranker/issues"
+Changelog = "https://github.com/lhallee/featureranker/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "src/featureranker/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/featureranker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers -m 'not slow'"
+markers = [
+    "slow: long-running benchmarks, excluded by default; run with pytest -m slow",
+]
