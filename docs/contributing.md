@@ -39,6 +39,23 @@ when changing ranking code.
 - One module per responsibility: `ranking.py` orchestrates; each method
   family owns its module and its options dataclass.
 
+## Regenerating example docs
+
+The pages in `docs/examples/` and the images in `docs/images/` are written
+by the scripts in `examples/`. After changing ranking or plotting behavior,
+rerun them so the documentation shows current output:
+
+```bash
+python examples/breast_cancer.py
+python examples/diabetes.py
+python examples/modernbert_sentiment.py extract --out artifacts
+python examples/modernbert_sentiment.py rank --artifacts artifacts
+```
+
+The ModernBERT extract phase needs torch, transformers, and datasets (a GPU
+helps); its rank phase, and the other two scripts, need only featureranker.
+The two phases can run in different interpreters.
+
 ## Releasing
 
 1. Update `CHANGELOG.md`.

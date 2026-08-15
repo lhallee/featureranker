@@ -63,6 +63,14 @@ def test_plot_rankings_top_n(univariate_result):
     assert len(ax.get_yticklabels()) == 5
 
 
+def test_plot_rankings_axis_scales_to_shown_rows(wide_data):
+    """With thousands of features the axis follows the displayed top ranks."""
+    X, y = wide_data
+    result = feature_ranking(X, y, methods=["mi", "f_test"])
+    ax = plot_rankings(result, top_n=10, show=False)
+    assert ax.get_xlim()[1] < result.n_features / 2
+
+
 def test_plot_rank_heatmap(univariate_result):
     ax = plot_rank_heatmap(univariate_result, show=False)
     assert isinstance(ax, plt.Axes)

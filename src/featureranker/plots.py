@@ -136,7 +136,10 @@ def plot_rankings(
     ax.invert_yaxis()
     ax.margins(y=0.02)
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax.set_xlim(0.3, result.n_features + 0.7)
+    # scale to the displayed rows: with thousands of features the shown top
+    # ranks would otherwise huddle at the left of a nearly empty axis
+    shown_max = float(spread.to_numpy().max())  # ()
+    ax.set_xlim(0.3, shown_max * 1.05 + 0.7)
     ax.grid(axis="x", color=_GRID, linewidth=1.0)
     ax.set_xlabel("Rank (1 = most important)", color=_INK_SECONDARY)
     legend = ax.legend(
@@ -173,7 +176,7 @@ def plot_rank_heatmap(
         ranks,
         cmap=_SEQUENTIAL_R,
         vmin=1.0,
-        vmax=float(result.n_features),
+        vmax=float(ranks.to_numpy().max()),
         annot=annotate,
         fmt=".0f",
         annot_kws={"fontsize": 9},
