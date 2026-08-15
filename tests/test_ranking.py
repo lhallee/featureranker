@@ -59,10 +59,43 @@ def test_bad_n_jobs(synthetic_classification):
         feature_ranking(X, y, methods=UNIVARIATE, n_jobs=0)
 
 
-def test_rejects_numpy_features(synthetic_classification):
+def test_numpy_features_get_generated_ids(synthetic_classification):
+    """Unnamed matrices (embeddings, hidden states) rank under generated IDs."""
     X, y = synthetic_classification
-    with pytest.raises(TypeError, match="DataFrame"):
-        feature_ranking(X.to_numpy(), y, methods=UNIVARIATE)
+    result = feature_ranking(X.to_numpy(), y, methods=UNIVARIATE)
+    assert result.feature_names[:2] == ("f00", "f01")
+    assert result.feature_names[-1] == "f11"
+    top4 = set(result.rankings["f_test"]["feature"].head(4))
+    assert top4 == {"f00", "f01", "f02", "f03"}
+
+
+def test_generated_names_zero_pad():
+    from featureranker.ranking import generated_feature_names
+
+    assert generated_feature_names(10)[0] == "f0"
+    assert generated_feature_names(11)[:2] == ("f00", "f01")
+    names = generated_feature_names(1536)
+    assert names[0] == "f0000" and names[-1] == "f1535"
+    assert list(names) == sorted(names)
+
+
+def test_rejects_list_features(synthetic_classification):
+    X, y = synthetic_classification
+    with pytest.raises(TypeError, match="DataFrame or a 2D numpy array"):
+        feature_ranking(X.to_numpy().tolist(), y, methods=UNIVARIATE)
+
+
+def test_rejects_1d_numpy(synthetic_classification):
+    X, y = synthetic_classification
+    with pytest.raises(ValueError, match="2D"):
+        feature_ranking(X.to_numpy()[:, 0], y, methods=UNIVARIATE)
+
+
+def test_rejects_object_numpy(synthetic_classification):
+    _, y = synthetic_classification
+    X_obj = np.full((len(y), 3), "text", dtype=object)
+    with pytest.raises(ValueError, match="non-numeric"):
+        feature_ranking(X_obj, y, methods=UNIVARIATE)
 
 
 def test_duplicate_columns(synthetic_classification):

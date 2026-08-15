@@ -76,20 +76,42 @@ def _resolve_options(method: str, supplied: object, options_type: type | None) -
     )
 
 
+def generated_feature_names(n_features: int) -> tuple[str, ...]:
+    """Stable IDs for unnamed features: f000..f999 style, zero-padded."""
+    width = max(len(str(n_features - 1)), 1)
+    return tuple(f"f{i:0{width}d}" for i in range(n_features))
+
+
 def _convert_features(
-    X: pd.DataFrame, dtype: str
+    X: pd.DataFrame | np.ndarray, dtype: str
 ) -> tuple[np.ndarray, tuple[str, ...]]:
-    """Convert the feature frame to one shared numeric array."""
-    if not isinstance(X, pd.DataFrame):
-        raise TypeError(f"X must be a pandas DataFrame, got {type(X).__name__}.")
-    feature_names = tuple(str(name) for name in X.columns)
-    if len(set(feature_names)) != len(feature_names):
-        raise ValueError("X has duplicate column names.")
+    """Convert the feature matrix to one shared numeric array plus names.
+
+    A DataFrame keeps its column names; a bare 2D array (an embedding matrix,
+    pooled hidden states, any engineered dense vector) gets generated IDs.
+    """
+    if isinstance(X, np.ndarray):
+        if X.ndim != 2:
+            raise ValueError(f"A numpy X must be 2D (n_samples, n_features), got ndim={X.ndim}.")
+        feature_names = generated_feature_names(X.shape[1])
+        source = X
+    elif isinstance(X, pd.DataFrame):
+        feature_names = tuple(str(name) for name in X.columns)
+        if len(set(feature_names)) != len(feature_names):
+            raise ValueError("X has duplicate column names.")
+        source = None
+    else:
+        raise TypeError(
+            f"X must be a pandas DataFrame or a 2D numpy array, got {type(X).__name__}."
+        )
     if X.shape[1] == 0 or X.shape[0] < 2:
         raise ValueError(f"X needs at least 2 rows and 1 column, got shape {X.shape}.")
 
     try:
-        X_arr = np.ascontiguousarray(X.to_numpy(dtype=np.dtype(dtype)))  # (n, p)
+        if source is None:
+            X_arr = np.ascontiguousarray(X.to_numpy(dtype=np.dtype(dtype)))  # (n, p)
+        else:
+            X_arr = np.ascontiguousarray(source, dtype=np.dtype(dtype))  # (n, p)
     except (ValueError, TypeError) as error:
         raise ValueError(
             f"X contains non-numeric data; encode it first with get_data(): {error}"
@@ -129,7 +151,7 @@ def _convert_target(
 
 
 def feature_ranking(
-    X: pd.DataFrame,
+    X: pd.DataFrame | np.ndarray,
     y: pd.Series | np.ndarray,
     task: Literal["classification", "regression"] = "classification",
     methods: Sequence[str] | None = None,
@@ -140,10 +162,12 @@ def feature_ranking(
 ) -> RankingResult:
     """Rank features with an ensemble of methods and return a RankingResult.
 
-    Methods run sequentially; each consumes the full n_jobs core budget
-    internally, which avoids nested-parallelism oversubscription. options maps
-    a method key to either an option dict or its options dataclass, for
-    example options={"mi": {"max_samples": None}}.
+    X is any numeric feature matrix: a DataFrame keeps its column names, and
+    a bare 2D numpy array (embeddings, pooled hidden states) gets generated
+    IDs like f0000. Methods run sequentially; each consumes the full n_jobs
+    core budget internally, which avoids nested-parallelism oversubscription.
+    options maps a method key to an option dict or its options dataclass,
+    for example options={"mi": {"max_samples": None}}.
     """
     if task not in ("classification", "regression"):
         raise ValueError(f"Unknown task {task!r}. Valid: 'classification', 'regression'.")

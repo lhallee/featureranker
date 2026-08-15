@@ -1,6 +1,7 @@
 # featureranker documentation
 
-featureranker ranks the features of a tabular dataset with five methods
+featureranker ranks the features of any numeric feature matrix (a tabular
+dataset, a transformer embedding, pooled hidden states) with five methods
 (random forest, XGBoost, mutual information, ANOVA F-test, and L1
 regularization paths), stores every ranking in one typed result object, and
 aggregates them with weighted rank voting. These pages describe v3.0.0 on

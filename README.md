@@ -3,9 +3,12 @@
 [![Tests](https://github.com/lhallee/featureranker/actions/workflows/tests.yml/badge.svg)](https://github.com/lhallee/featureranker/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/featureranker)](https://pypi.org/project/featureranker/)
 
-Ensemble feature ranking for tabular machine learning. Five methods rank
-every feature, a typed result object holds the evidence, and weighted rank
-voting produces one consensus ordering, for classification and regression.
+Ensemble feature ranking for any numeric feature matrix: tabular datasets,
+transformer embeddings, pooled hidden states, engineered features. Five
+methods rank every feature, a typed result object holds the evidence, and
+weighted rank voting produces one consensus ordering, for classification and
+regression. Unnamed matrices work directly: pass a numpy array and features
+get stable generated IDs.
 
 Featured in:
 

@@ -59,6 +59,28 @@ result = feature_ranking(data.data, data.target, task="regression")
 vote_table = voting(result, method="borda")
 ```
 
+## Unnamed features: embeddings and hidden states
+
+`X` does not need column names. Pass a 2D numpy array (a transformer
+embedding matrix, pooled hidden states, any dense representation) and
+features get stable generated IDs whose integer suffix is the column index:
+
+```python
+import numpy as np
+from featureranker import feature_ranking
+
+E = np.load("pooled_embeddings.npy")   # (n_samples, n_dims)
+labels = np.load("labels.npy")         # (n_samples,)
+result = feature_ranking(E, labels, task="classification")
+result.rankings["l1"].head(5)          # features named f0000, f0001, ...
+```
+
+With thousands of dimensions, only a handful usually matter; the plots
+default to the top 30-40 features, so the important dimensions surface
+without any manual selection. See the
+[ModernBERT sentiment example](examples/modernbert_sentiment.md) for a full
+run on 1,536 pooled transformer dimensions.
+
 ## Choosing methods and weights
 
 ```python
