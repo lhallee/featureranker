@@ -11,7 +11,7 @@ values in the message.
 
 ```python
 def feature_ranking(
-    X: pd.DataFrame,
+    X: pd.DataFrame | np.ndarray,
     y: pd.Series | np.ndarray,
     task: Literal["classification", "regression"] = "classification",
     methods: Sequence[str] | None = None,
@@ -27,7 +27,7 @@ and returns a [`RankingResult`](#featurerankerrankingresult).
 
 | parameter | meaning |
 |---|---|
-| `X` | numeric feature frame; encode raw data first with [`get_data`](#featurerankerget_data) |
+| `X` | numeric feature matrix: a DataFrame keeps its column names; a bare 2D numpy array (embeddings, hidden states) gets generated IDs from [`generated_feature_names`](#featurerankergenerated_feature_names); encode raw frames first with [`get_data`](#featurerankerget_data) |
 | `y` | target; classification targets of any dtype are label-encoded, the original labels land in `result.classes` |
 | `methods` | subset of [`METHODS`](#featurerankermethods) in run order; default all five |
 | `n_jobs` | total core budget, -1 = all cores (see [performance.md](performance.md)) |
@@ -49,6 +49,16 @@ METHODS: tuple[str, ...] = ("rf", "xg", "mi", "f_test", "l1")
 ```
 
 Method keys, in default run order. See [algorithms.md](algorithms.md).
+
+### featureranker.generated_feature_names
+
+```python
+def generated_feature_names(n_features: int) -> tuple[str, ...]
+```
+
+The stable zero-padded IDs assigned to unnamed feature matrices
+(`f0000`, `f0001`, ...). Exposed so downstream code can map a ranked ID back
+to a column index: the integer suffix is the position in the input matrix.
 
 ### featureranker.RankingResult
 

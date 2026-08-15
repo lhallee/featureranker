@@ -56,6 +56,12 @@ steps.
 
 ### Added
 
+- `feature_ranking` accepts a bare 2D numpy array (embeddings, pooled
+  hidden states); unnamed features get stable zero-padded IDs via the new
+  `generated_feature_names`.
+- Self-regenerating examples: scripts in `examples/` write the pages in
+  `docs/examples/` and their plots, including a ModernBERT sentiment
+  run over 1,536 unnamed pooled transformer dimensions.
 - `RankingResult` with `rank_matrix`, `score_matrix`, `equals`, `save`,
   `load`, and per-method diagnostics.
 - Typed per-method options: `LassoOptions`, `LogisticL1Options`,

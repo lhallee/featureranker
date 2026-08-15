@@ -12,7 +12,7 @@ from .plots import (
     plot_rank_heatmap,
     plot_rankings,
 )
-from .ranking import METHODS, feature_ranking
+from .ranking import METHODS, feature_ranking, generated_feature_names
 from .result import RankingResult
 from .trees import TreeSearchOptions
 from .univariate import MutualInfoOptions
@@ -24,6 +24,7 @@ __all__ = [
     "RankingResult",
     "voting",
     "METHODS",
+    "generated_feature_names",
     # options
     "LassoOptions",
     "LogisticL1Options",

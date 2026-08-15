@@ -16,3 +16,5 @@ venv/
 *.pkl
 *.joblib
 *.png
+!docs/images/*.png
+artifacts/
