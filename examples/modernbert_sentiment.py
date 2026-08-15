@@ -37,7 +37,7 @@ def extract(out_dir: Path) -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModel.from_pretrained(MODEL_NAME, torch_dtype=dtype).to(device).eval()
+    model = AutoModel.from_pretrained(MODEL_NAME, dtype=dtype).to(device).eval()
 
     rows = load_dataset(DATASET, split=f"train[:{N_SAMPLES}]")
     texts = rows["sentence"]
