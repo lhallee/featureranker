@@ -46,15 +46,19 @@ by the scripts in `examples/`. After changing ranking or plotting behavior,
 rerun them so the documentation shows current output:
 
 ```bash
-python examples/breast_cancer.py
-python examples/diabetes.py
-python examples/modernbert_sentiment.py extract --out artifacts
-python examples/modernbert_sentiment.py rank --artifacts artifacts
+python examples/embed_extract.py --all --out artifacts
+python examples/selection_vs_reduction.py --all --fresh --artifacts artifacts
+python examples/write_report.py
+python examples/modernbert_sentiment.py extract --out artifacts_sst2
+python examples/modernbert_sentiment.py rank --artifacts artifacts_sst2
 ```
 
-The ModernBERT extract phase needs torch, transformers, and datasets (a GPU
-helps); its rank phase, and the other two scripts, need only featureranker.
-The two phases can run in different interpreters.
+`embed_extract.py` and the flagship extract phase need torch, transformers,
+and datasets (gensim for the GloVe set; a GPU helps). The harness
+(`selection_vs_reduction.py`, one registered example per `--name`, the
+whole registry with `--all`), the report generator, and the flagship rank
+phase need featureranker plus umap-learn and datasets. The extract and
+rank sides can run in different interpreters.
 
 ## Releasing
 

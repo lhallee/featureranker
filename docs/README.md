@@ -12,7 +12,7 @@ Python >= 3.11.
 | You want | Read |
 |---|---|
 | Install and first run | [quickstart.md](quickstart.md) |
-| Worked examples with plots (named, regression, unnamed embedding features) | [examples/breast_cancer.md](examples/breast_cancer.md), [examples/diabetes.md](examples/diabetes.md), [examples/modernbert_sentiment.md](examples/modernbert_sentiment.md) |
+| 20 worked examples with plots and a selection-vs-reduction ablation on each | [examples/report.md](examples/report.md) links every page; deep dive: [examples/modernbert_sentiment.md](examples/modernbert_sentiment.md) |
 | The math and score each method produces | [algorithms.md](algorithms.md) |
 | Speed, n_jobs, adaptive strategies, determinism | [performance.md](performance.md) |
 | Every public signature and exception | [api.md](api.md) |

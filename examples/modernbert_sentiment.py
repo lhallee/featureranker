@@ -122,7 +122,7 @@ def _comparison_rows(E, y, train_idx, test_idx, vote_table, random_state: int):
             n_components=k, method="exact", init="random", max_iter=500,
             random_state=random_state,
         ).fit_transform(E)  # (n, k)
-        rows.append((f"t-SNE {k} (transductive)", k, probe(Z[train_idx], Z[test_idx])))
+        rows.append((f"t-SNE {k}", k, probe(Z[train_idx], Z[test_idx])))
     return rows
 
 
