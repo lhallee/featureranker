@@ -235,9 +235,7 @@ def load_dataset(name: str, artifacts: Path):
         rows = hf_load("papluca/language-identification", split="train")
         frame = rows.to_pandas()
         keep = frame[frame["labels"].isin(["en", "fr", "de", "es", "it", "pt"])]
-        keep = keep.groupby("labels", group_keys=False).apply(
-            lambda block: block.sample(n=600, random_state=SEED)
-        )
+        keep = keep.groupby("labels", group_keys=False).sample(n=600, random_state=SEED)
         return _tfidf(keep["text"].tolist(), keep["labels"].to_numpy(), analyzer="char", ngram_range=(1, 3))
     if name == "spambase_engineered":
         return _openml(44)
