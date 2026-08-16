@@ -26,7 +26,7 @@ TEXT_DATASETS = {
     "modernbert_agnews": ("fancyzhx/ag_news", None, "train", "text", "label", 4000, 128),
     "modernbert_emotion": ("dair-ai/emotion", None, "train", "text", "label", 4000, 128),
     "modernbert_imdb": ("stanfordnlp/imdb", None, "train", "text", "label", 3000, 256),
-    "modernbert_trec": ("CogComp/trec", None, "train", "text", "coarse_label", 4000, 64),
+    "modernbert_trec": ("SetFit/TREC-QC", None, "train", "text", "label_coarse", 4000, 64),
     "modernbert_offensive": ("cardiffnlp/tweet_eval", "offensive", "train", "text", "label", 4000, 128),
     "modernbert_subjectivity": ("SetFit/subj", None, "train", "text", "label", 4000, 128),
     "modernbert_sms_spam": ("ucirvine/sms_spam", None, "train", "sms", "label", 4000, 128),
