@@ -20,15 +20,16 @@ from modernbert_sentiment import BATCH_SIZE, MODEL_NAME
 SEED = 42
 
 # name -> (hf path, hf config, split, text field, label field, cap, max_length)
+# datasets 5.x resolves only namespaced repository ids
 TEXT_DATASETS = {
     "modernbert_sst2": ("stanfordnlp/sst2", None, "train", "sentence", "label", 4000, 128),
-    "modernbert_agnews": ("ag_news", None, "train", "text", "label", 4000, 128),
+    "modernbert_agnews": ("fancyzhx/ag_news", None, "train", "text", "label", 4000, 128),
     "modernbert_emotion": ("dair-ai/emotion", None, "train", "text", "label", 4000, 128),
-    "modernbert_imdb": ("imdb", None, "train", "text", "label", 3000, 256),
-    "modernbert_trec": ("trec", None, "train", "text", "coarse_label", 4000, 64),
-    "modernbert_offensive": ("tweet_eval", "offensive", "train", "text", "label", 4000, 128),
+    "modernbert_imdb": ("stanfordnlp/imdb", None, "train", "text", "label", 3000, 256),
+    "modernbert_trec": ("CogComp/trec", None, "train", "text", "coarse_label", 4000, 64),
+    "modernbert_offensive": ("cardiffnlp/tweet_eval", "offensive", "train", "text", "label", 4000, 128),
     "modernbert_subjectivity": ("SetFit/subj", None, "train", "text", "label", 4000, 128),
-    "modernbert_sms_spam": ("sms_spam", None, "train", "sms", "label", 4000, 128),
+    "modernbert_sms_spam": ("ucirvine/sms_spam", None, "train", "sms", "label", 4000, 128),
 }
 
 
@@ -109,6 +110,9 @@ def main() -> None:
 
     chosen = [*TEXT_DATASETS, "glove_sst2"] if args.all else [args.dataset]
     for name in chosen:
+        if (args.out / name / "embeddings.npy").exists():
+            print(f"{name}: already extracted, skipping")
+            continue
         try:
             if name == "glove_sst2":
                 extract_glove_sst2(args.out)
