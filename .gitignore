@@ -19,3 +19,4 @@ CHANGELOG.md
 *.png
 !docs/images/*.png
 artifacts/
+local_usage.ipynb
