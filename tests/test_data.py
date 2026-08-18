@@ -37,7 +37,88 @@ def test_get_data_basic(messy_df):
     assert "constant" not in X.columns
     assert "mostly_nan" not in X.columns
     assert len(X) == len(y)
-    assert X["cat_col"].dtype in (np.int32, np.int64)
+
+
+def test_get_data_onehot_default(messy_df):
+    """cat_col holds A/B/C strings, so it expands into named sub-features."""
+    X, _ = get_data(messy_df, target="target")
+    assert "cat_col" not in X.columns
+    sub_features = X[["cat_col-A", "cat_col-B", "cat_col-C"]]
+    assert (sub_features.sum(axis=1) == 1).all()
+    assert set(sub_features.to_numpy().ravel()) == {0, 1}
+
+
+def test_get_data_onehot_injected_in_place(messy_df):
+    """Sub-features sit where the parent column was, not appended at the end."""
+    X, _ = get_data(messy_df, target="target")
+    assert list(X.columns) == [
+        "num_a", "num_b", "num_c", "cat_col-A", "cat_col-B", "cat_col-C",
+    ]
+
+
+def test_get_data_onehot_int_categories():
+    """Integer categories name sub-features color-0, color-1, ..."""
+    df = pd.DataFrame({
+        "num": [1.0, 2.0, 3.0, 4.0],
+        "color": pd.Categorical([0, 1, 2, 0]),
+        "target": [0, 1, 0, 1],
+    })
+    X, _ = get_data(df, target="target")
+    assert list(X.columns) == ["num", "color-0", "color-1", "color-2"]
+
+
+def test_get_data_label_encoding_option(messy_df):
+    X, _ = get_data(messy_df, target="target", encoding="label")
+    assert "cat_col" in X.columns
+    assert np.issubdtype(X["cat_col"].dtype, np.integer)
+
+
+def test_get_data_max_categories_fallback():
+    """Cardinality above max_categories falls back to label encoding."""
+    df = pd.DataFrame({
+        "num": [1.0, 2.0, 3.0, 4.0, 5.0],
+        "wide": ["a", "b", "c", "d", "e"],
+        "target": [0, 1, 0, 1, 0],
+    })
+    X, _ = get_data(df, target="target", max_categories=3)
+    assert "wide" in X.columns
+    assert np.issubdtype(X["wide"].dtype, np.integer)
+    X_full, _ = get_data(df, target="target", max_categories=None)
+    assert "wide-a" in X_full.columns
+    assert X_full.shape[1] == 6
+
+
+def test_get_data_bool_column_stays_single():
+    """Booleans become one 0/1 column, not two redundant sub-features."""
+    df = pd.DataFrame({
+        "num": [1.0, 2.0, 3.0, 4.0],
+        "flag": [True, False, True, False],
+        "target": [0, 1, 0, 1],
+    })
+    X, _ = get_data(df, target="target")
+    assert list(X.columns) == ["num", "flag"]
+    assert set(X["flag"]) == {0, 1}
+
+
+def test_get_data_bad_encoding(messy_df):
+    with pytest.raises(ValueError, match="encoding"):
+        get_data(messy_df, target="target", encoding="ordinal")
+
+
+def test_get_data_bad_max_categories(messy_df):
+    with pytest.raises(ValueError, match="max_categories"):
+        get_data(messy_df, target="target", max_categories=1)
+
+
+def test_get_data_duplicate_subfeature_name():
+    """A sub-feature name colliding with a real column raises, not silently duplicates."""
+    df = pd.DataFrame({
+        "color-blue": [1.0, 2.0, 3.0, 4.0],
+        "color": ["blue", "red", "blue", "red"],
+        "target": [0, 1, 0, 1],
+    })
+    with pytest.raises(ValueError, match="duplicate"):
+        get_data(df, target="target")
 
 
 def test_get_data_drop_columns(messy_df):
@@ -92,7 +173,9 @@ def test_get_data_encodes_category_dtype():
         "target": [0, 1, 0, 1],
     })
     X, _ = get_data(df, target="target")
-    assert np.issubdtype(X["cat"].dtype, np.integer)
+    assert list(X.columns) == ["num", "cat-x", "cat-y", "cat-z"]
+    X_label, _ = get_data(df, target="target", encoding="label")
+    assert np.issubdtype(X_label["cat"].dtype, np.integer)
 
 
 def test_get_data_converts_datetime():

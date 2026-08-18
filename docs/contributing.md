@@ -62,7 +62,8 @@ rank sides can run in different interpreters.
 
 ## Releasing
 
-1. Update `CHANGELOG.md`.
+1. Update the local `CHANGELOG.md` (untracked; its content becomes the
+   GitHub release notes).
 2. Bump `__version__` in `src/featureranker/__init__.py` (the only version
    site; pyproject reads it through hatchling).
 3. Merge to `main` with the tests workflow green.

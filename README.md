@@ -41,6 +41,35 @@ plot_after_vote(vote_table, top_n=15)      # consensus scores
 rank and score matrices, diagnostics, and save/load. Results are
 deterministic for a given `random_state` at any `n_jobs`.
 
+## Hugging Face datasets
+
+Pass a Hub path, name the label column, list what to exclude; the rest
+become features. Categorical columns one-hot expand into named sub-features
+(`sex-Female`, `workclass-Private`) by default.
+
+```python
+from featureranker import feature_ranking, get_hf_data
+
+X, y = get_hf_data(
+    "scikit-learn/adult-census-income",
+    target="income",
+    columns_to_drop=["fnlwgt"],
+)
+result = feature_ranking(X, y, task="classification")
+```
+
+## One score from the best features
+
+`fit_convex` finds the optimal convex combination of the top consensus
+features: weights >= 0 that sum to one, so each weight is that feature's
+share of a single interpretable scoring function.
+
+```python
+fit = result.fit_convex(X, y, top_n=10)
+fit.table()               # ["feature", "weight"], largest first
+scores = fit.predict(X)   # rank rows by the combined score
+```
+
 ## Ranking methods
 
 | Key | Method | Score |

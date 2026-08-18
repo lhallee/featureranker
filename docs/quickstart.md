@@ -6,8 +6,8 @@
 pip install featureranker
 ```
 
-Requires Python >= 3.11. The heavy dependencies are scikit-learn >= 1.8 and
-xgboost >= 2.0.
+Requires Python >= 3.11. The heavy dependencies are scikit-learn >= 1.8,
+xgboost >= 2.0, and datasets >= 2.19 (the Hugging Face loaders).
 
 ## Classification in five lines
 
@@ -47,6 +47,57 @@ df = pd.read_csv("my_data.csv")
 view_data(df)                        # missing-value report per column
 X, y = get_data(df, target="label")  # cleaned features and encoded target
 ```
+
+Categorical columns one-hot expand into named sub-features by default: a
+`color` column with values `blue` and `red` becomes `color-blue` and
+`color-red`, injected where `color` was, so the rankings speak in category
+memberships. `encoding="label"` keeps single label-encoded columns instead,
+and columns with more than `max_categories` unique values (default 64) fall
+back to label encoding automatically.
+
+## Loading a Hugging Face dataset
+
+`get_hf_data` takes a Hub path, downloads the split, converts it to pandas,
+and runs the same cleaning: name the label column, list what to exclude,
+and every remaining column becomes a feature.
+
+```python
+from featureranker import feature_ranking, get_hf_data, voting
+
+X, y = get_hf_data(
+    "scikit-learn/adult-census-income",
+    target="income",
+    columns_to_drop=["fnlwgt"],
+)
+result = feature_ranking(X, y, task="classification")
+voting(result).head(10)
+```
+
+`load_hf_dataset(path)` returns the raw DataFrame when you want to inspect
+or transform it before `get_data`, and `hf_login()` authenticates for
+private or gated datasets.
+
+## One score from the best features
+
+After ranking, `fit_convex` turns the strongest features into a single
+scoring function: weights >= 0 that sum to one, fit by least squares, so
+each weight is that feature's share of the score. Threshold with `top_n`
+when the consensus shows a clear cut:
+
+```python
+result = feature_ranking(X, y, task="classification")
+fit = result.fit_convex(X, y, top_n=10)   # combine the top 10 consensus features
+
+fit.table()          # ["feature", "weight"], largest first
+fit.metric_value     # AUC (classification) or R2 (regression) on the fit data
+scores = fit.predict(X_new)  # rank new rows with the fitted combination
+```
+
+The fit is deterministic and globally optimal (a convex quadratic program).
+Classification must be binary; the score ranks rows by class membership.
+Features are z-scored internally by default so mixed scales cannot dominate
+the fit; pass `standardize=False` when your features already share a scale
+and the score should be the weighted average of the raw values.
 
 ## Regression
 

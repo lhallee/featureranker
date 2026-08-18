@@ -6,10 +6,15 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
 from scipy.stats import rankdata
+
+if TYPE_CHECKING:
+    from .convex import ConvexFit
 
 
 def make_table(feature_names: tuple[str, ...], scores: np.ndarray) -> pd.DataFrame:
@@ -69,6 +74,33 @@ class RankingResult:
         R = rankdata(-S, method="average", axis=0)  # (p, m)
         return pd.DataFrame(
             R, index=list(self.feature_names), columns=list(self.rankings)
+        )
+
+    def fit_convex(
+        self,
+        X: pd.DataFrame | np.ndarray,
+        y: pd.Series | np.ndarray,
+        top_n: int | None = None,
+        weights: Mapping[str, float] | None = None,
+        vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
+        standardize: bool = True,
+    ) -> "ConvexFit":
+        """Fit the optimal convex combination of the top consensus features.
+
+        Keeps the top_n features of the voting consensus (all when None) and
+        finds weights >= 0 summing to one that minimize the squared error of
+        the combined score against y. X must carry the same features that
+        produced this result. standardize=True z-scores features first, so
+        the weights are unit-free shares; pass False when the features are
+        already commensurate and the score should be the weighted average of
+        the raw values. See convex.fit_convex_from_result.
+        """
+        # deferred import: convex depends on vote, which depends on this module
+        from .convex import fit_convex_from_result
+
+        return fit_convex_from_result(
+            self, X, y, top_n=top_n, weights=weights,
+            vote_method=vote_method, standardize=standardize,
         )
 
     def equals(self, other: "RankingResult") -> bool:

@@ -88,6 +88,7 @@ entry thresholds, per-method wall seconds) and is excluded from `equals`.
 | `methods` | property; tuple of method keys in run order |
 | `score_matrix() -> pd.DataFrame` | features x methods raw scores, rows in `feature_names` order |
 | `rank_matrix() -> pd.DataFrame` | features x methods average ranks, 1 = best, ties share ranks |
+| `fit_convex(X, y, top_n=None, ...)` | fit a convex combination of the top consensus features, see [Convex combination](#featurerankerrankingresultfit_convex) |
 | `equals(other) -> bool` | exact equality of rankings and metadata, diagnostics excluded |
 | `save(path) -> None` | serialize with joblib |
 | `RankingResult.load(path)` | classmethod; raises `ValueError` on unreadable files or wrong payload, warns on version mismatch |
@@ -107,6 +108,89 @@ Accepts a `RankingResult` or any mapping of name to ranking table with the
 standard columns. Weights are keyed by method name; missing keys default to
 1.0, unknown keys raise `ValueError`, non-numeric weights raise `TypeError`.
 Formulas in [algorithms.md](algorithms.md#voting).
+
+## Convex combination
+
+A convex combination scores each row as `X @ w` with weights `w >= 0` that
+sum to one, so every weight reads as a feature's share of one interpretable
+scoring function. The weights minimize the mean squared error of the score
+against the target (for classification, against the 0/1 encoded labels, so
+the score ranks rows by class membership rather than calibrated
+probability). The problem is a convex quadratic program solved from a
+uniform start, so the fit is deterministic and globally optimal.
+
+`standardize=True` (the default) z-scores each feature before fitting and
+stores the transform on the returned `ConvexFit`, which `predict` applies.
+Standardized weights are unit-free shares, the right reading when features
+carry different units or scales. Pass `standardize=False` when the
+features are already commensurate (sub-scores of a ranking scheme, model
+outputs on a shared scale) and the score should be the weighted average of
+the raw values.
+
+### featureranker.RankingResult.fit_convex
+
+```python
+def fit_convex(
+    self,
+    X: pd.DataFrame | np.ndarray,
+    y: pd.Series | np.ndarray,
+    top_n: int | None = None,
+    weights: Mapping[str, float] | None = None,
+    vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
+    standardize: bool = True,
+) -> ConvexFit
+```
+
+Runs [`voting`](#featurerankervoting) with the given `weights` and
+`vote_method`, keeps the `top_n` consensus features (all when None), and
+fits the combination on those columns of X. X must carry the same features
+that produced the result (same DataFrame columns, or a numpy matrix of the
+same width), though the rows may differ, so the combination can be fit on
+held-out data. Raises `ValueError` when X does not match the ranked
+features, `top_n` is outside `[1, n_features]`, or the task is
+classification with more than 2 classes.
+
+### featureranker.fit_convex
+
+```python
+def fit_convex(
+    X: pd.DataFrame | np.ndarray,
+    y: pd.Series | np.ndarray,
+    task: Literal["classification", "regression"] = "classification",
+    standardize: bool = True,
+) -> ConvexFit
+```
+
+The standalone form: fits the combination over every column of X, no
+ranking required. Input rules match
+[`feature_ranking`](#featurerankerfeature_ranking); classification must be
+binary.
+
+### featureranker.ConvexFit
+
+```python
+@dataclass(frozen=True, eq=False)
+class ConvexFit:
+    task: str
+    feature_names: tuple[str, ...]
+    weights: np.ndarray
+    feature_means: np.ndarray | None
+    feature_stds: np.ndarray | None
+    metric_name: str
+    metric_value: float
+    diagnostics: dict[str, object]
+```
+
+`weights` aligns with `feature_names`, is nonnegative, and sums to one.
+`feature_means`/`feature_stds` hold the stored standardization (None for a
+raw fit). `metric_name`/`metric_value` hold R2 for regression or ROC AUC
+for binary classification, computed on the fitting data. `diagnostics`
+carries solver internals (convergence, iterations, mean squared error).
+
+| member | meaning |
+|---|---|
+| `predict(X) -> np.ndarray` | score rows: a DataFrame is matched by column name, a numpy array must carry exactly the fitted features in order |
+| `table() -> pd.DataFrame` | weights as `["feature", "weight"]`, largest first |
 
 ## Method options
 
@@ -192,17 +276,31 @@ def get_data(
     columns_to_drop: list[str] | None = None,
     n_rows: int | None = None,
     random_state: int = 42,
+    encoding: Literal["onehot", "label"] = "onehot",
+    max_categories: int | None = 64,
 ) -> tuple[pd.DataFrame, pd.Series]
 ```
 
 Cleans a raw frame in a fixed order: drop `columns_to_drop`, drop feature
 columns with less than `thresh` fraction of present values, drop rows with
 remaining missing values, optionally shuffle-sample `n_rows`, drop constant
-columns, then encode object/string/bool/category feature columns
-(label-encoded), datetime and timedelta columns (int64 nanoseconds), and a
-non-numeric target. Raises `ValueError` for a missing target, unknown drop
-columns, the target listed in `columns_to_drop`, `thresh` outside (0, 1],
-or `n_rows` beyond the cleaned length.
+columns, then encode feature columns and a non-numeric target.
+
+Encoding rules: object/string/category feature columns one-hot expand into
+one 0/1 sub-feature per unique value in the data, named
+`"{column}-{value}"` (`color-blue` for strings, `color-0` for integer
+categories) and injected at the parent column's position, so ranked
+sub-features read directly as category memberships. Columns with more than
+`max_categories` unique values fall back to a single label-encoded column
+(`max_categories=None` removes the cap); `encoding="label"` restores the
+previous behavior of label-encoding every categorical column. Booleans
+become single 0/1 columns, datetime and timedelta columns become int64
+nanoseconds, and a non-numeric target is label-encoded.
+
+Raises `ValueError` for a missing target, unknown drop columns, the target
+listed in `columns_to_drop`, `thresh` outside (0, 1], unknown `encoding`,
+`max_categories` below 2, `n_rows` beyond the cleaned length, or a
+sub-feature name colliding with an existing column.
 
 ### featureranker.view_data
 
@@ -221,6 +319,61 @@ def sanitize_column_names(df: pd.DataFrame) -> pd.DataFrame
 
 Returns a copy whose column names have non-word characters replaced with
 underscores.
+
+## Hugging Face
+
+### featureranker.get_hf_data
+
+```python
+def get_hf_data(
+    path: str,
+    target: str,
+    split: str = "train",
+    name: str | None = None,
+    thresh: float = 0.8,
+    columns_to_drop: list[str] | None = None,
+    n_rows: int | None = None,
+    random_state: int = 42,
+    encoding: Literal["onehot", "label"] = "onehot",
+    max_categories: int | None = 64,
+    **load_kwargs,
+) -> tuple[pd.DataFrame, pd.Series]
+```
+
+Downloads one split of a Hub dataset and returns `(features, target)` ready
+for [`feature_ranking`](#featurerankerfeature_ranking). `target` names the
+label column, `columns_to_drop` excludes columns such as ids or free text,
+and every remaining column becomes a feature. The frame goes through
+[`get_data`](#featurerankerget_data), so cleaning, sampling, and categorical
+encoding behave exactly as documented there; `load_kwargs` pass through to
+`datasets.load_dataset` (revision, data_files, token, ...).
+
+### featureranker.load_hf_dataset
+
+```python
+def load_hf_dataset(
+    path: str,
+    split: str = "train",
+    name: str | None = None,
+    **load_kwargs,
+) -> pd.DataFrame
+```
+
+Downloads one split of a Hub dataset and returns it as a raw pandas
+DataFrame, without any cleaning or encoding. `name` selects a configuration
+for multi-config datasets. Raises `ValueError` when `split` resolves to
+multiple splits.
+
+### featureranker.hf_login
+
+```python
+def hf_login(token: str | None = None) -> None
+```
+
+Authenticates with the Hugging Face Hub for private or gated datasets.
+Without a token this opens the interactive Hub prompt; with a token it
+stores the credential the same way `hf auth login` does. Public datasets
+need no login.
 
 ## Plots
 

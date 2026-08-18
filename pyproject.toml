@@ -35,6 +35,7 @@ dependencies = [
     "seaborn>=0.13",
     "xgboost>=2.0",
     "joblib>=1.3",
+    "datasets>=2.19",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +48,7 @@ dev = [
 Repository = "https://github.com/lhallee/featureranker"
 Documentation = "https://github.com/lhallee/featureranker/tree/main/docs"
 Issues = "https://github.com/lhallee/featureranker/issues"
-Changelog = "https://github.com/lhallee/featureranker/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/lhallee/featureranker/releases"
 
 [tool.hatch.version]
 path = "src/featureranker/__init__.py"

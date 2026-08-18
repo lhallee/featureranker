@@ -1,8 +1,10 @@
 """featureranker: ensemble feature ranking with weighted voting."""
 
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 
+from .convex import ConvexFit, fit_convex
 from .data import get_data, sanitize_column_names, view_data
+from .hf import get_hf_data, hf_login, load_hf_dataset
 from .lasso import LassoOptions
 from .logistic import LogisticL1Options
 from .plots import (
@@ -25,6 +27,9 @@ __all__ = [
     "voting",
     "METHODS",
     "generated_feature_names",
+    # convex combination
+    "fit_convex",
+    "ConvexFit",
     # options
     "LassoOptions",
     "LogisticL1Options",
@@ -34,6 +39,10 @@ __all__ = [
     "get_data",
     "view_data",
     "sanitize_column_names",
+    # hugging face
+    "get_hf_data",
+    "load_hf_dataset",
+    "hf_login",
     # plots
     "plot_rankings",
     "plot_rank_heatmap",

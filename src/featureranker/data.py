@@ -3,7 +3,10 @@
 import logging
 import re
 
+import numpy as np
 import pandas as pd
+
+from typing import Literal
 
 from sklearn.preprocessing import LabelEncoder
 
@@ -28,22 +31,83 @@ def view_data(df: pd.DataFrame) -> pd.Series:
     return nan_pct
 
 
-def _encode_features(clean: pd.DataFrame, feature_columns: list[str]) -> None:
-    """Encode categorical and temporal feature columns in place."""
-    features = clean[feature_columns]
-    temporal = features.select_dtypes(
-        include=["datetime", "datetimetz", "timedelta"]
-    ).columns
-    for column in temporal:
-        clean[column] = clean[column].astype("int64")
-        logger.info("Converted temporal column %s to int64 nanoseconds.", column)
+def _is_categorical(values: pd.Series) -> bool:
+    """Object, string, and category dtypes take categorical encoding."""
+    return values.dtype == object or isinstance(
+        values.dtype, (pd.StringDtype, pd.CategoricalDtype)
+    )
 
-    categorical = features.select_dtypes(
-        include=["object", "string", "bool", "category"]
-    ).columns
-    for column in categorical:
-        clean[column] = LabelEncoder().fit_transform(clean[column])
-        logger.info("Encoded column %s.", column)
+
+def _one_hot(values: pd.Series, column: str) -> pd.DataFrame:
+    """Expand one categorical column into 0/1 sub-features named column-value."""
+    if isinstance(values.dtype, pd.CategoricalDtype):
+        values = values.cat.remove_unused_categories()
+    return pd.get_dummies(values, prefix=column, prefix_sep="-", dtype=np.int8)  # (n, k)
+
+
+def _encode_features(
+    clean: pd.DataFrame,
+    feature_columns: list[str],
+    encoding: str,
+    max_categories: int | None,
+) -> pd.DataFrame:
+    """Encode temporal, boolean, and categorical feature columns.
+
+    With encoding="onehot", each categorical column expands into one 0/1
+    sub-feature per unique value in the data, named "{column}-{value}" and
+    injected at the parent column's position; columns whose cardinality
+    exceeds max_categories fall back to label encoding. With
+    encoding="label", categorical columns are label-encoded in place. Under
+    both settings booleans become single 0/1 columns and datetime/timedelta
+    columns become int64 nanoseconds.
+    """
+    features = clean[feature_columns]
+    temporal = set(
+        features.select_dtypes(include=["datetime", "datetimetz", "timedelta"]).columns
+    )
+    boolean = set(features.select_dtypes(include=["bool"]).columns)
+
+    pieces: list[pd.Series | pd.DataFrame] = []
+    for column in feature_columns:
+        values = clean[column]  # (n,)
+        if column in temporal:
+            pieces.append(values.astype("int64"))
+            logger.info("Converted temporal column %s to int64 nanoseconds.", column)
+        elif column in boolean:
+            pieces.append(values.astype(np.int8))
+            logger.info("Converted boolean column %s to 0/1.", column)
+        elif _is_categorical(values):
+            n_categories = values.nunique(dropna=False)
+            if encoding == "onehot" and (
+                max_categories is None or n_categories <= max_categories
+            ):
+                sub_features = _one_hot(values, str(column))  # (n, k)
+                pieces.append(sub_features)
+                logger.info(
+                    "One-hot encoded column %s into %d sub-features.",
+                    column, sub_features.shape[1],
+                )
+            else:
+                encoded = LabelEncoder().fit_transform(values)  # (n,)
+                pieces.append(pd.Series(encoded, index=values.index, name=column))
+                if encoding == "onehot":
+                    logger.info(
+                        "Label encoded column %s: %d unique values exceed "
+                        "max_categories=%d.", column, n_categories, max_categories,
+                    )
+                else:
+                    logger.info("Label encoded column %s.", column)
+        else:
+            pieces.append(values)
+
+    X = pd.concat(pieces, axis=1)  # (n, p_encoded)
+    duplicates = X.columns[X.columns.duplicated()].unique().tolist()
+    if duplicates:
+        raise ValueError(
+            f"Encoding produced duplicate column names: {duplicates}. "
+            "Rename the conflicting columns before calling get_data."
+        )
+    return X
 
 
 def _encode_target(y: pd.Series) -> pd.Series:
@@ -64,18 +128,28 @@ def get_data(
     columns_to_drop: list[str] | None = None,
     n_rows: int | None = None,
     random_state: int = 42,
+    encoding: Literal["onehot", "label"] = "onehot",
+    max_categories: int | None = 64,
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Prepare a raw frame for ranking and return (features, target).
 
     Steps, in order: drop requested columns, drop feature columns with less
     than `thresh` fraction of values present, drop rows with remaining
     missing values, optionally shuffle-sample n_rows, drop constant columns,
-    then encode categorical/temporal features and a non-numeric target.
+    then encode features and a non-numeric target. Categorical feature
+    columns one-hot expand into "{column}-{value}" sub-features by default;
+    encoding="label" keeps them as single label-encoded columns, and
+    columns with more than max_categories unique values fall back to label
+    encoding (max_categories=None one-hot encodes at any cardinality).
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError(f"df must be a pandas DataFrame, got {type(df).__name__}.")
     if not 0.0 < thresh <= 1.0:
         raise ValueError(f"thresh must be in (0, 1], got {thresh}.")
+    if encoding not in ("onehot", "label"):
+        raise ValueError(f"Unknown encoding {encoding!r}. Valid: 'onehot', 'label'.")
+    if max_categories is not None and max_categories < 2:
+        raise ValueError(f"max_categories must be None or >= 2, got {max_categories}.")
     if target not in df.columns:
         raise ValueError(f"Target column {target!r} not found in the DataFrame.")
 
@@ -124,7 +198,6 @@ def get_data(
         kept_columns = [c for c in kept_columns if c not in constant_columns]
         logger.info("Removed constant columns: %s.", constant_columns)
 
-    _encode_features(clean, kept_columns)
-    X = clean[kept_columns]
-    y = _encode_target(clean[target])
+    X = _encode_features(clean, kept_columns, encoding, max_categories)  # (n, p_encoded)
+    y = _encode_target(clean[target])  # (n,)
     return X, y
