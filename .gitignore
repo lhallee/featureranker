@@ -12,6 +12,7 @@ venv/
 .vscode/
 .qodo
 .ipynb_checkpoints/
+CHANGELOG.md
 *.csv
 *.pkl
 *.joblib
