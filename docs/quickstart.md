@@ -61,9 +61,9 @@ back to label encoding automatically.
 
 ## Loading a Hugging Face dataset
 
-`get_hf_data` takes a Hub path, downloads the split, converts it to pandas,
-and runs the same cleaning: name the label column, list what to exclude,
-and every remaining column becomes a feature.
+`get_hf_data` takes a Hub path, downloads it, converts it to pandas, and
+runs the same cleaning: name the label column, list what to exclude, and
+every remaining column becomes a feature.
 
 ```python
 from featureranker import feature_ranking, get_hf_data, voting
@@ -75,6 +75,21 @@ X, y = get_hf_data(
 )
 result = feature_ranking(X, y, task="classification")
 voting(result).head(10)
+```
+
+When the dataset also carries validation or test splits, they are found
+automatically and the return becomes a `DataSplits`, cleaned and encoded
+jointly so the feature columns match across splits. Rank and fit on train,
+tune on valid, report on test:
+
+```python
+splits = get_hf_data("org/dataset-with-splits", target="labels")
+result = feature_ranking(splits.X_train, splits.y_train)
+fit = result.fit_convex(
+    splits.X_train, splits.y_train, top_n=15,
+    valid=splits.valid, test=splits.test,
+)
+fit.metrics          # {"train": ..., "valid": ..., "test": ...}
 ```
 
 `load_hf_dataset(path)` returns the raw DataFrame when you want to inspect
@@ -93,10 +108,13 @@ result = feature_ranking(X, y, task="classification")
 fit = result.fit_convex(X, y, top_n=10)   # combine the top 10 consensus features
 
 fit.table()          # ["feature", "weight"], largest first
-fit.metric_value     # AUC (classification) or R2 (regression) on the fit data
-fit.method_metrics   # the same metric refit on each method's own top 10
+fit.metrics          # AUC or R2 per split: train, plus valid/test when given
+fit.method_metrics   # the same metrics refit on each method's own top 10
 scores = fit.predict(X_new)  # rank new rows with the fitted combination
 ```
+
+Pass `valid=(X_valid, y_valid)` and `test=(X_test, y_test)` to score
+held-out splits the fit never trains on.
 
 The fit is deterministic and globally optimal.
 Classification must be binary; the score ranks rows by class membership.

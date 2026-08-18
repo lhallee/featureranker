@@ -1,10 +1,10 @@
 """featureranker: ensemble feature ranking with weighted voting."""
 
-__version__ = "3.0.3"
+__version__ = "3.0.4"
 
 from .convex import ConvexFit, fit_convex
 from .data import get_data, sanitize_column_names, view_data
-from .hf import get_hf_data, hf_login, load_hf_dataset
+from .hf import DataSplits, get_hf_data, hf_login, load_hf_dataset
 from .lasso import LassoOptions
 from .logistic import LogisticL1Options
 from .plots import (
@@ -43,6 +43,7 @@ __all__ = [
     "get_hf_data",
     "load_hf_dataset",
     "hf_login",
+    "DataSplits",
     # plots
     "plot_rankings",
     "plot_rank_heatmap",

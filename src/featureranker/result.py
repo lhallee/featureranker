@@ -104,6 +104,8 @@ class RankingResult:
         vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
         standardize: bool = True,
         entropy: float = 0.1,
+        valid: tuple[pd.DataFrame | np.ndarray, pd.Series | np.ndarray] | None = None,
+        test: tuple[pd.DataFrame | np.ndarray, pd.Series | np.ndarray] | None = None,
     ) -> "ConvexFit":
         """Fit the optimal convex combination of the top consensus features.
 
@@ -115,14 +117,16 @@ class RankingResult:
         already commensurate and the score should be the weighted average of
         the raw values. entropy sets the maximum-entropy smoothing that
         keeps every weight strictly positive; entropy=0 allows exact zeros.
-        See convex.fit_convex_from_result.
+        valid and test are held-out (X, y) pairs, never trained on; their
+        metrics land in fit.metrics and fit.method_metrics per split. See
+        convex.fit_convex_from_result.
         """
         # deferred import: convex depends on vote, which depends on this module
         from .convex import fit_convex_from_result
 
         return fit_convex_from_result(
             self, X, y, top_n=top_n, weights=weights, vote_method=vote_method,
-            standardize=standardize, entropy=entropy,
+            standardize=standardize, entropy=entropy, valid=valid, test=test,
         )
 
     def equals(self, other: "RankingResult") -> bool:

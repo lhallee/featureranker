@@ -162,19 +162,30 @@ def fit_convex(
     vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
     standardize: bool = True,
     entropy: float = 0.1,
+    valid: tuple[X, y] | None = None,
+    test: tuple[X, y] | None = None,
 ) -> ConvexFit
 ```
 
 Runs [`voting`](#featurerankervoting) with the given `weights` and
 `vote_method`, keeps the `top_n` consensus features (all when None), and
 fits the combination on those columns of X. Every ranking method's own
-top_n selection is also fitted and those metrics land in
+top_n selection is also fitted and those per-split metrics land in
 `method_metrics` beside the returned `"ensemble"` fit, so the consensus
 selection is directly comparable against each method's. X must carry the
 same features that produced the result (same DataFrame columns, or a numpy
-matrix of the same width), though the rows may differ, so the combination
-can be fit on held-out data. A `top_n` above the feature count clamps to
-all features. Raises `ValueError` when X does not match the ranked
+matrix of the same width), though the rows may differ.
+
+`valid` and `test` are held-out `(X, y)` pairs with those same features
+(for example `splits.valid` and `splits.test` from a
+[`DataSplits`](#featurerankerdatasplits)); the fit never trains on them
+and reports their metrics per split in `fit.metrics` and
+`fit.method_metrics`. Use valid to choose between selections and settings;
+quote test for the final result. Their targets are encoded with the class
+mapping of the fitting target, so an unseen label raises.
+
+A `top_n` above the feature count clamps to all features. Raises
+`ValueError` when X or an evaluation pair does not match the ranked
 features, `top_n` is below 1, `entropy` is negative, or the task is
 classification with more than 2 classes.
 
@@ -187,13 +198,15 @@ def fit_convex(
     task: Literal["classification", "regression"] = "classification",
     standardize: bool = True,
     entropy: float = 0.1,
+    valid: tuple[X, y] | None = None,
+    test: tuple[X, y] | None = None,
 ) -> ConvexFit
 ```
 
 The standalone form: fits the combination over every column of X, no
 ranking required. Input rules match
 [`feature_ranking`](#featurerankerfeature_ranking); classification must be
-binary.
+binary. `valid` and `test` behave as in `RankingResult.fit_convex`.
 
 ### featureranker.ConvexFit
 
@@ -206,18 +219,20 @@ class ConvexFit:
     feature_means: np.ndarray | None
     feature_stds: np.ndarray | None
     metric_name: str
-    metric_value: float
+    metrics: dict[str, float]
     diagnostics: dict[str, object]
-    method_metrics: dict[str, float] | None = None
+    method_metrics: dict[str, dict[str, float]] | None = None
 ```
 
 `weights` aligns with `feature_names`, is nonnegative, and sums to one.
 `feature_means`/`feature_stds` hold the stored standardization (None for a
-raw fit). `metric_name`/`metric_value` hold R2 for regression or ROC AUC
-for binary classification, computed on the fitting data. `diagnostics`
-carries solver internals (convergence, iterations, mean squared error).
-`method_metrics` is filled by `RankingResult.fit_convex`: the same metric
-refit on each ranking method's own top_n selection plus the returned
+raw fit). `metric_name` is `"r2"` for regression or `"auc"` for binary
+classification; `metrics` holds that metric per split: `"train"` (the
+fitting data, also exposed as the `metric_value` property) plus `"valid"`
+and `"test"` when those pairs were given. `diagnostics` carries solver
+internals (convergence, iterations, mean squared error). `method_metrics`
+is filled by `RankingResult.fit_convex`: the same per-split metrics refit
+on each ranking method's own top_n selection plus the returned
 `"ensemble"` fit; None for a standalone fit.
 
 | member | meaning |
@@ -317,7 +332,9 @@ def get_data(
 Cleans a raw frame in a fixed order: drop `columns_to_drop`, drop feature
 columns with less than `thresh` fraction of present values, drop rows with
 remaining missing values, optionally shuffle-sample `n_rows`, drop constant
-columns, then encode feature columns and a non-numeric target.
+columns, then encode feature columns and a non-numeric target. X and y
+keep the original row index of the surviving rows, so cleaned rows stay
+traceable to the source frame.
 `columns_to_drop` entries are exact names or glob patterns: `"target_*"`
 drops every matching column, a pattern never drops the target itself, and
 a pattern matching nothing raises to catch typos.
@@ -366,6 +383,8 @@ def get_hf_data(
     path: str,
     target: str,
     split: str = "train",
+    valid_split: str | None = "auto",
+    test_split: str | None = "auto",
     name: str | None = None,
     thresh: float = 0.8,
     columns_to_drop: list[str] | None = None,
@@ -374,17 +393,45 @@ def get_hf_data(
     encoding: Literal["onehot", "label"] = "onehot",
     max_categories: int | None = 64,
     **load_kwargs,
-) -> tuple[pd.DataFrame, pd.Series]
+) -> tuple[pd.DataFrame, pd.Series] | DataSplits
 ```
 
-Downloads one split of a Hub dataset and returns `(features, target)` ready
-for [`feature_ranking`](#featurerankerfeature_ranking). `target` names the
-label column, `columns_to_drop` excludes columns such as ids or free text
-(exact names or glob patterns like `"target_*"`), and every remaining
-column becomes a feature. The frame goes through
+Downloads a Hub dataset and prepares it for
+[`feature_ranking`](#featurerankerfeature_ranking), split-aware. `target`
+names the label column, `columns_to_drop` excludes columns such as ids or
+free text (exact names or glob patterns like `"target_*"`), and every
+remaining column becomes a feature. The frames go through
 [`get_data`](#featurerankerget_data), so cleaning, sampling, and categorical
 encoding behave exactly as documented there; `load_kwargs` pass through to
 `datasets.load_dataset` (revision, data_files, token, ...).
+
+Under the `"auto"` defaults the dataset's own validation split (named
+`validation`, `valid`, `val`, or `dev`) and `test` split are loaded when
+they exist; a split can also be named explicitly or disabled with None.
+With only a train split the return is `(X, y)`. When extra splits resolve,
+the return is a [`DataSplits`](#featurerankerdatasplits): cleaning and
+encoding run jointly over all splits so the feature columns always match
+(a category seen only in test still gets its sub-feature everywhere), rows
+are cleaned per split, and `n_rows` samples the train split only.
+
+### featureranker.DataSplits
+
+```python
+@dataclass(frozen=True)
+class DataSplits:
+    X_train: pd.DataFrame
+    y_train: pd.Series
+    X_valid: pd.DataFrame | None = None
+    y_valid: pd.Series | None = None
+    X_test: pd.DataFrame | None = None
+    y_test: pd.Series | None = None
+```
+
+The `valid` and `test` properties return the pair as `(X, y)` or None when
+the split is absent, ready to pass to
+[`fit_convex`](#featurerankerrankingresultfit_convex). Best practice: rank
+and fit on train, compare and tune on valid, report the final result on
+test.
 
 ### featureranker.load_hf_dataset
 

@@ -30,11 +30,15 @@ class ConvexFit:
     average of the (optionally standardized) features and each weight reads
     as that feature's share of the combination. When the fit standardized,
     feature_means/feature_stds hold the stored transform and predict
-    applies it; both are None for a raw fit. metric_value holds R2 for
-    regression and ROC AUC for binary classification, both computed on the
-    fitting data. A fit from a RankingResult also fills method_metrics: the
-    same metric refit on each ranking method's own top_n selection, with
-    "ensemble" the returned voting-consensus fit.
+    applies it; both are None for a raw fit.
+
+    metrics holds R2 (regression) or ROC AUC (binary classification) per
+    split: "train" is always present and computed on the fitting data;
+    "valid" and "test" appear when those pairs were passed to the fit. A
+    fit from a RankingResult also fills method_metrics: the same per-split
+    metrics refit on each ranking method's own top_n selection, with
+    "ensemble" the returned voting-consensus fit. Use valid to choose
+    between selections and settings; quote test for the final result.
     """
 
     task: str
@@ -43,9 +47,14 @@ class ConvexFit:
     feature_means: np.ndarray | None  # (k,) or None for a raw fit
     feature_stds: np.ndarray | None  # (k,) or None for a raw fit
     metric_name: str
-    metric_value: float
+    metrics: dict[str, float]
     diagnostics: dict[str, object]
-    method_metrics: dict[str, float] | None = None
+    method_metrics: dict[str, dict[str, float]] | None = None
+
+    @property
+    def metric_value(self) -> float:
+        """The fitting-data metric; metrics carries valid/test beside it."""
+        return self.metrics["train"]
 
     def predict(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
         """Score rows with the fitted combination.
@@ -80,9 +89,12 @@ class ConvexFit:
         return table.reset_index(drop=True)
 
     def __repr__(self) -> str:
+        reported = " ".join(
+            f"{split}={value:.4f}" for split, value in self.metrics.items()
+        )
         return (
             f"ConvexFit(task={self.task!r}, n_features={len(self.feature_names)}, "
-            f"{self.metric_name}={self.metric_value:.4f})"
+            f"{self.metric_name}: {reported})"
         )
 
 
@@ -192,10 +204,7 @@ def _fit(
     gamma = entropy * float(y.var())
     weights, diagnostics = _solve_simplex_least_squares(X_fit, y, gamma)
     scores = X_fit @ weights  # (n,)
-    if task == "classification":
-        metric_name, metric_value = "auc", float(roc_auc_score(y, scores))
-    else:
-        metric_name, metric_value = "r2", float(r2_score(y, scores))
+    metric_name = "auc" if task == "classification" else "r2"
     return ConvexFit(
         task=task,
         feature_names=feature_names,
@@ -203,22 +212,86 @@ def _fit(
         feature_means=feature_means,
         feature_stds=feature_stds,
         metric_name=metric_name,
-        metric_value=metric_value,
+        metrics={"train": _metric(task, y, scores)},
         diagnostics=diagnostics,
     )
 
 
+def _metric(task: str, y: np.ndarray, scores: np.ndarray) -> float:
+    """ROC AUC for classification, R2 for regression."""
+    # y: (n,); scores: (n,)
+    if task == "classification":
+        return float(roc_auc_score(y, scores))
+    return float(r2_score(y, scores))
+
+
 def _binary_target(
     y: pd.Series | np.ndarray, task: str, n_samples: int
-) -> np.ndarray:
-    """Convert the target for a simplex fit; classification must be binary."""
+) -> tuple[np.ndarray, tuple[object, ...] | None]:
+    """Convert the fit target; classification must be binary."""
     y_arr, classes = _convert_target(y, task, n_samples)  # (n,)
     if classes is not None and len(classes) != 2:
         raise ValueError(
             f"Convex fitting supports binary classification; y has "
             f"{len(classes)} classes. A single score cannot separate more."
         )
-    return y_arr.astype(np.float64)  # (n,)
+    return y_arr.astype(np.float64), classes  # (n,)
+
+
+def _encode_eval_target(
+    y: pd.Series | np.ndarray,
+    task: str,
+    classes: tuple[object, ...] | None,
+    n_samples: int,
+    split_name: str,
+) -> np.ndarray:
+    """Encode an evaluation target with the class mapping of the fit target."""
+    y_arr = np.asarray(y).ravel()  # (n,)
+    if y_arr.shape[0] != n_samples:
+        raise ValueError(
+            f"{split_name} X has {n_samples} rows but its y has {y_arr.shape[0]}."
+        )
+    if pd.isna(y_arr).any():
+        raise ValueError(f"{split_name} y contains missing values.")
+    if task == "classification":
+        encoded_of = {label: float(code) for code, label in enumerate(classes)}
+        try:
+            return np.array([encoded_of[label] for label in y_arr])  # (n,)
+        except KeyError as error:
+            raise ValueError(
+                f"{split_name} y contains label {error.args[0]!r} that the "
+                "fitting target never showed."
+            ) from None
+    y_float = y_arr.astype(np.float64)  # (n,)
+    if not np.isfinite(y_float).all():
+        raise ValueError(f"{split_name} y contains infinite values.")
+    return y_float
+
+
+def _check_eval_pair(pair: object, split_name: str) -> tuple[object, object]:
+    """An evaluation split must arrive as an (X, y) pair."""
+    if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+        raise TypeError(f"{split_name} must be an (X, y) pair, got {type(pair).__name__}.")
+    return pair[0], pair[1]
+
+
+def _attach_eval_metrics(
+    fit: ConvexFit,
+    classes: tuple[object, ...] | None,
+    evals: dict[str, object],
+) -> ConvexFit:
+    """Score the fit on evaluation pairs and return it with those metrics."""
+    metrics = dict(fit.metrics)
+    for split_name, pair in evals.items():
+        if pair is None:
+            continue
+        X_eval, y_eval = _check_eval_pair(pair, split_name)
+        scores = fit.predict(X_eval)  # (n_eval,)
+        y_arr = _encode_eval_target(
+            y_eval, fit.task, classes, scores.shape[0], split_name
+        )  # (n_eval,)
+        metrics[split_name] = _metric(fit.task, y_arr, scores)
+    return replace(fit, metrics=metrics)
 
 
 def fit_convex(
@@ -227,6 +300,8 @@ def fit_convex(
     task: Literal["classification", "regression"] = "classification",
     standardize: bool = True,
     entropy: float = 0.1,
+    valid: tuple[pd.DataFrame | np.ndarray, pd.Series | np.ndarray] | None = None,
+    test: tuple[pd.DataFrame | np.ndarray, pd.Series | np.ndarray] | None = None,
 ) -> ConvexFit:
     """Fit the optimal convex combination of every column of X against y.
 
@@ -244,20 +319,25 @@ def fit_convex(
     every weight strictly positive, because the entropy gradient diverges
     at the simplex boundary, and makes the optimum unique even when
     features duplicate each other. entropy=0 recovers the plain least
-    squares fit, where redundant features get exact zero weights. To
-    combine only the strongest features from a ranking run, call
-    RankingResult.fit_convex with top_n instead.
+    squares fit, where redundant features get exact zero weights.
+
+    valid and test are optional held-out (X, y) pairs carrying the same
+    features; the fit never trains on them and reports their metrics in
+    fit.metrics beside "train". To combine only the strongest features
+    from a ranking run, call RankingResult.fit_convex with top_n instead.
     """
     if task not in ("classification", "regression"):
         raise ValueError(f"Unknown task {task!r}. Valid: 'classification', 'regression'.")
     if entropy < 0.0:
         raise ValueError(f"entropy must be >= 0, got {entropy}.")
     X_arr, feature_names = _convert_features(X, "float64")  # (n, k)
-    y_arr = _binary_target(y, task, X_arr.shape[0])  # (n,)
+    y_arr, classes = _binary_target(y, task, X_arr.shape[0])  # (n,)
     fit = _fit(X_arr, y_arr, feature_names, task, standardize, entropy)
+    fit = _attach_eval_metrics(fit, classes, {"valid": valid, "test": test})
     logger.info(
-        "Convex fit over %d features: %s=%.4f.",
-        len(feature_names), fit.metric_name, fit.metric_value,
+        "Convex fit over %d features, %s: %s.",
+        len(feature_names), fit.metric_name,
+        ", ".join(f"{split}={value:.4f}" for split, value in fit.metrics.items()),
     )
     return fit
 
@@ -271,15 +351,20 @@ def fit_convex_from_result(
     vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
     standardize: bool = True,
     entropy: float = 0.1,
+    valid: tuple[pd.DataFrame | np.ndarray, pd.Series | np.ndarray] | None = None,
+    test: tuple[pd.DataFrame | np.ndarray, pd.Series | np.ndarray] | None = None,
 ) -> ConvexFit:
     """Fit a convex combination of the top consensus features of a ranking.
 
     Consensus order comes from voting(result, weights, vote_method); the
     top_n features (all when None) are fitted and returned. Every ranking
-    method's own top_n selection is also fitted, and those metrics land in
-    method_metrics beside the returned "ensemble" fit. X must carry the
-    same features that produced the ranking result, though the rows may
-    differ. standardize and entropy behave as in fit_convex.
+    method's own top_n selection is also fitted, and those per-split
+    metrics land in method_metrics beside the returned "ensemble" fit.
+    X must carry the same features that produced the ranking result,
+    though the rows may differ. valid and test are held-out (X, y) pairs
+    with those same features, never trained on: use valid metrics to
+    choose between selections and settings, and quote test for the final
+    result. standardize and entropy behave as in fit_convex.
     """
     if entropy < 0.0:
         raise ValueError(f"entropy must be >= 0, got {entropy}.")
@@ -289,7 +374,23 @@ def fit_convex_from_result(
             "X does not match the ranked features; pass a matrix with the "
             "same columns that produced this RankingResult."
         )
-    y_arr = _binary_target(y, result.task, X_arr.shape[0])  # (n,)
+    y_arr, classes = _binary_target(y, result.task, X_arr.shape[0])  # (n,)
+
+    evals: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for split_name, pair in (("valid", valid), ("test", test)):
+        if pair is None:
+            continue
+        X_eval, y_eval = _check_eval_pair(pair, split_name)
+        X_eval_arr, eval_names = _convert_features(X_eval, "float64")  # (n_eval, p)
+        if eval_names != result.feature_names:
+            raise ValueError(
+                f"{split_name} X does not match the ranked features; pass the "
+                "same columns that produced this RankingResult."
+            )
+        y_eval_arr = _encode_eval_target(
+            y_eval, result.task, classes, X_eval_arr.shape[0], split_name
+        )  # (n_eval,)
+        evals[split_name] = (X_eval_arr, y_eval_arr)
 
     if top_n is None:
         top_n = result.n_features
@@ -306,24 +407,37 @@ def fit_convex_from_result(
     column_index = {name: i for i, name in enumerate(feature_names)}
 
     def fit_selection(selected: tuple[str, ...]) -> ConvexFit:
-        X_sel = X_arr[:, [column_index[name] for name in selected]]  # (n, top_n)
-        return _fit(X_sel, y_arr, selected, result.task, standardize, entropy)
+        indices = [column_index[name] for name in selected]
+        fit = _fit(
+            X_arr[:, indices], y_arr, selected, result.task, standardize, entropy
+        )
+        if not evals:
+            return fit
+        metrics = dict(fit.metrics)
+        for split_name, (X_eval_arr, y_eval_arr) in evals.items():
+            scores = fit.predict(X_eval_arr[:, indices])  # (n_eval,)
+            metrics[split_name] = _metric(result.task, y_eval_arr, scores)
+        return replace(fit, metrics=metrics)
 
     ensemble = fit_selection(tuple(consensus["feature"].head(top_n)))
     if top_n == result.n_features:
         # every selection is the same full feature set, so every fit
         # reaches the same optimum; skip the redundant solves
-        method_metrics = {method: ensemble.metric_value for method in result.methods}
+        method_metrics = {method: dict(ensemble.metrics) for method in result.methods}
     else:
         method_metrics = {
-            method: fit_selection(tuple(table["feature"].head(top_n))).metric_value
+            method: fit_selection(tuple(table["feature"].head(top_n))).metrics
             for method, table in result.rankings.items()
         }
-    method_metrics["ensemble"] = ensemble.metric_value
-    logger.info(
-        "Convex fit %s over top %d by selection: %s.",
-        ensemble.metric_name,
-        top_n,
-        ", ".join(f"{name}={value:.4f}" for name, value in method_metrics.items()),
-    )
+    method_metrics["ensemble"] = dict(ensemble.metrics)
+    for split_name in ensemble.metrics:
+        logger.info(
+            "Convex fit %s on %s by selection: %s.",
+            ensemble.metric_name,
+            split_name,
+            ", ".join(
+                f"{name}={values[split_name]:.4f}"
+                for name, values in method_metrics.items()
+            ),
+        )
     return replace(ensemble, method_metrics=method_metrics)

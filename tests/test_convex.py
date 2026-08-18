@@ -212,8 +212,8 @@ def test_result_fit_convex_reports_method_metrics(planted_regression):
     result = feature_ranking(X, y, task="regression", methods=["mi", "f_test"])
     fit = result.fit_convex(X, y, top_n=2)
     assert list(fit.method_metrics) == ["mi", "f_test", "ensemble"]
-    assert fit.method_metrics["ensemble"] == fit.metric_value
-    assert all(isinstance(value, float) for value in fit.method_metrics.values())
+    assert fit.method_metrics["ensemble"] == fit.metrics
+    assert all("train" in values for values in fit.method_metrics.values())
 
 
 def test_result_fit_convex_full_set_metrics_collapse(planted_regression):
@@ -221,13 +221,66 @@ def test_result_fit_convex_full_set_metrics_collapse(planted_regression):
     X, y = planted_regression
     result = feature_ranking(X, y, task="regression", methods=["f_test"])
     fit = result.fit_convex(X, y)
-    assert fit.method_metrics == {"f_test": fit.metric_value, "ensemble": fit.metric_value}
+    assert fit.method_metrics == {"f_test": fit.metrics, "ensemble": fit.metrics}
 
 
 def test_standalone_fit_convex_has_no_method_metrics(planted_regression):
     X, y = planted_regression
     fit = fit_convex(X, y, task="regression")
     assert fit.method_metrics is None
+    assert set(fit.metrics) == {"train"}
+    assert fit.metric_value == fit.metrics["train"]
+
+
+def _three_way_split(X, y):
+    return (
+        (X.iloc[:240], y.iloc[:240]),
+        (X.iloc[240:320], y.iloc[240:320]),
+        (X.iloc[320:], y.iloc[320:]),
+    )
+
+
+def test_fit_convex_reports_valid_and_test_metrics(planted_regression):
+    X, y = planted_regression
+    (X_tr, y_tr), valid, test = _three_way_split(X, y)
+    fit = fit_convex(X_tr, y_tr, task="regression", valid=valid, test=test)
+    assert list(fit.metrics) == ["train", "valid", "test"]
+    assert fit.metrics["valid"] > 0.9
+    assert fit.metrics["test"] > 0.9
+    assert "test=" in repr(fit)
+
+
+def test_result_fit_convex_eval_splits(planted_regression):
+    X, y = planted_regression
+    (X_tr, y_tr), valid, test = _three_way_split(X, y)
+    result = feature_ranking(X_tr, y_tr, task="regression", methods=["f_test"])
+    fit = result.fit_convex(X_tr, y_tr, top_n=2, valid=valid, test=test)
+    for values in fit.method_metrics.values():
+        assert set(values) == {"train", "valid", "test"}
+    assert fit.method_metrics["ensemble"] == fit.metrics
+
+
+def test_fit_convex_eval_pair_must_be_pair(planted_regression):
+    X, y = planted_regression
+    with pytest.raises(TypeError, match="pair"):
+        fit_convex(X, y, task="regression", test=X)
+
+
+def test_fit_convex_eval_unseen_label_raises(planted_regression):
+    X, _ = planted_regression
+    y = (X["a"] > 0).astype(int)
+    y_test = y.iloc[:50].copy()
+    y_test.iloc[0] = 2
+    with pytest.raises(ValueError, match="never showed"):
+        fit_convex(X, y, task="classification", test=(X.iloc[:50], y_test))
+
+
+def test_result_fit_convex_eval_mismatched_features(planted_regression):
+    X, y = planted_regression
+    result = feature_ranking(X, y, task="regression", methods=["f_test"])
+    renamed = X.rename(columns={"a": "z"})
+    with pytest.raises(ValueError, match="match"):
+        result.fit_convex(X, y, test=(renamed, y))
 
 
 def test_result_fit_convex_mismatched_columns(planted_regression):

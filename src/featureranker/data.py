@@ -171,7 +171,9 @@ def get_data(
     Steps, in order: drop requested columns, drop feature columns with less
     than `thresh` fraction of values present, drop rows with remaining
     missing values, optionally shuffle-sample n_rows, drop constant columns,
-    then encode features and a non-numeric target. columns_to_drop entries
+    then encode features and a non-numeric target. X and y keep the
+    original row index of the surviving rows, so cleaned rows stay
+    traceable to the source frame. columns_to_drop entries
     are exact names or glob patterns ("target_*" drops every match; a
     pattern never drops the target itself). Categorical feature columns
     one-hot expand into "{column}-{value}" sub-features by default;
@@ -220,7 +222,6 @@ def get_data(
             )
         clean = clean.sample(n=n_rows, random_state=random_state)
         logger.info("Shuffled and sampled %d rows.", n_rows)
-    clean = clean.reset_index(drop=True)
 
     constant_columns = [
         column for column in kept_columns if clean[column].nunique(dropna=False) == 1
