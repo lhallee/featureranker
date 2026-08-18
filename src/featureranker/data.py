@@ -1,5 +1,6 @@
 """Dataset preparation: cleaning, sampling, and encoding before ranking."""
 
+import fnmatch
 import logging
 import re
 
@@ -29,6 +30,40 @@ def view_data(df: pd.DataFrame) -> pd.Series:
     for column, pct in nan_pct.items():
         logger.info("Column %s is %.1f%% missing.", column, pct)
     return nan_pct
+
+
+def _resolve_columns_to_drop(
+    df: pd.DataFrame, target: str, columns_to_drop: list[str] | None
+) -> list[str]:
+    """Expand exact names and glob patterns ("target_*") into drop columns.
+
+    Exact names must exist and may not name the target. Entries containing
+    a wildcard (* ? [) match by fnmatch against every column except the
+    target, so a pattern can never drop the label; a pattern matching
+    nothing raises to catch typos.
+    """
+    dropped: list[str] = []
+    missing: list[str] = []
+    for entry in columns_to_drop or ():
+        if any(wildcard in str(entry) for wildcard in "*?["):
+            matches = [
+                column for column in df.columns
+                if column != target and fnmatch.fnmatchcase(str(column), str(entry))
+            ]
+            if not matches:
+                raise ValueError(f"Pattern {entry!r} matched no columns.")
+            dropped.extend(column for column in matches if column not in dropped)
+        elif entry == target:
+            raise ValueError(
+                f"Target column {target!r} is also listed in columns_to_drop."
+            )
+        elif entry not in df.columns:
+            missing.append(entry)
+        elif entry not in dropped:
+            dropped.append(entry)
+    if missing:
+        raise ValueError(f"Columns to drop not found: {sorted(missing)}.")
+    return dropped
 
 
 def _is_categorical(values: pd.Series) -> bool:
@@ -136,8 +171,10 @@ def get_data(
     Steps, in order: drop requested columns, drop feature columns with less
     than `thresh` fraction of values present, drop rows with remaining
     missing values, optionally shuffle-sample n_rows, drop constant columns,
-    then encode features and a non-numeric target. Categorical feature
-    columns one-hot expand into "{column}-{value}" sub-features by default;
+    then encode features and a non-numeric target. columns_to_drop entries
+    are exact names or glob patterns ("target_*" drops every match; a
+    pattern never drops the target itself). Categorical feature columns
+    one-hot expand into "{column}-{value}" sub-features by default;
     encoding="label" keeps them as single label-encoded columns, and
     columns with more than max_categories unique values fall back to label
     encoding (max_categories=None one-hot encodes at any cardinality).
@@ -153,12 +190,7 @@ def get_data(
     if target not in df.columns:
         raise ValueError(f"Target column {target!r} not found in the DataFrame.")
 
-    dropped = list(columns_to_drop or ())
-    missing_drops = set(dropped) - set(df.columns)
-    if missing_drops:
-        raise ValueError(f"Columns to drop not found: {sorted(missing_drops)}.")
-    if target in dropped:
-        raise ValueError(f"Target column {target!r} is also listed in columns_to_drop.")
+    dropped = _resolve_columns_to_drop(df, target, columns_to_drop)
     if dropped:
         logger.info("Dropping columns: %s.", dropped)
 

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal
 
 from scipy.optimize import minimize
@@ -31,7 +31,9 @@ class ConvexFit:
     feature_means/feature_stds hold the stored transform and predict
     applies it; both are None for a raw fit. metric_value holds R2 for
     regression and ROC AUC for binary classification, both computed on the
-    fitting data.
+    fitting data. A fit from a RankingResult also fills method_metrics: the
+    same metric refit on each ranking method's own top_n selection, with
+    "ensemble" the returned voting-consensus fit.
     """
 
     task: str
@@ -42,6 +44,7 @@ class ConvexFit:
     metric_name: str
     metric_value: float
     diagnostics: dict[str, object]
+    method_metrics: dict[str, float] | None = None
 
     def predict(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
         """Score rows with the fitted combination.
@@ -168,10 +171,6 @@ def _fit(
         metric_name, metric_value = "auc", float(roc_auc_score(y, scores))
     else:
         metric_name, metric_value = "r2", float(r2_score(y, scores))
-    logger.info(
-        "Convex fit over %d features: %s=%.4f.",
-        len(feature_names), metric_name, metric_value,
-    )
     return ConvexFit(
         task=task,
         feature_names=feature_names,
@@ -221,7 +220,12 @@ def fit_convex(
         raise ValueError(f"Unknown task {task!r}. Valid: 'classification', 'regression'.")
     X_arr, feature_names = _convert_features(X, "float64")  # (n, k)
     y_arr = _binary_target(y, task, X_arr.shape[0])  # (n,)
-    return _fit(X_arr, y_arr, feature_names, task, standardize)
+    fit = _fit(X_arr, y_arr, feature_names, task, standardize)
+    logger.info(
+        "Convex fit over %d features: %s=%.4f.",
+        len(feature_names), fit.metric_name, fit.metric_value,
+    )
+    return fit
 
 
 def fit_convex_from_result(
@@ -229,16 +233,18 @@ def fit_convex_from_result(
     X: pd.DataFrame | np.ndarray,
     y: pd.Series | np.ndarray,
     top_n: int | None = None,
-    weights: Mapping[str, float] | None = None,
+    weights: Mapping[str, float] | Literal["auto"] | None = None,
     vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
     standardize: bool = True,
 ) -> ConvexFit:
     """Fit a convex combination of the top consensus features of a ranking.
 
     Consensus order comes from voting(result, weights, vote_method); the
-    top_n features (all when None) are fitted. X must carry the same
-    features that produced the ranking result, though the rows may differ.
-    standardize behaves as in fit_convex.
+    top_n features (all when None) are fitted and returned. Every ranking
+    method's own top_n selection is also fitted, and those metrics land in
+    method_metrics beside the returned "ensemble" fit. X must carry the
+    same features that produced the ranking result, though the rows may
+    differ. standardize behaves as in fit_convex.
     """
     X_arr, feature_names = _convert_features(X, "float64")  # (n, p)
     if feature_names != result.feature_names:
@@ -250,11 +256,37 @@ def fit_convex_from_result(
 
     if top_n is None:
         top_n = result.n_features
-    if not 1 <= top_n <= result.n_features:
-        raise ValueError(f"top_n must be in [1, {result.n_features}], got {top_n}.")
+    if top_n < 1:
+        raise ValueError(f"top_n must be at least 1, got {top_n}.")
+    if top_n > result.n_features:
+        logger.info(
+            "top_n=%d exceeds the %d ranked features; fitting all of them.",
+            top_n, result.n_features,
+        )
+        top_n = result.n_features
 
     consensus = voting(result, weights=weights, method=vote_method)
-    selected = tuple(consensus["feature"].head(top_n))  # k names, best first
     column_index = {name: i for i, name in enumerate(feature_names)}
-    X_sel = X_arr[:, [column_index[name] for name in selected]]  # (n, k)
-    return _fit(X_sel, y_arr, selected, result.task, standardize)
+
+    def fit_selection(selected: tuple[str, ...]) -> ConvexFit:
+        X_sel = X_arr[:, [column_index[name] for name in selected]]  # (n, top_n)
+        return _fit(X_sel, y_arr, selected, result.task, standardize)
+
+    ensemble = fit_selection(tuple(consensus["feature"].head(top_n)))
+    if top_n == result.n_features:
+        # every selection is the same full feature set, so every fit
+        # reaches the same optimum; skip the redundant solves
+        method_metrics = {method: ensemble.metric_value for method in result.methods}
+    else:
+        method_metrics = {
+            method: fit_selection(tuple(table["feature"].head(top_n))).metric_value
+            for method, table in result.rankings.items()
+        }
+    method_metrics["ensemble"] = ensemble.metric_value
+    logger.info(
+        "Convex fit %s over top %d by selection: %s.",
+        ensemble.metric_name,
+        top_n,
+        ", ".join(f"{name}={value:.4f}" for name, value in method_metrics.items()),
+    )
+    return replace(ensemble, method_metrics=method_metrics)

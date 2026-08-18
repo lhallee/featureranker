@@ -1,6 +1,6 @@
 """featureranker: ensemble feature ranking with weighted voting."""
 
-__version__ = "3.0.1"
+__version__ = "3.0.2"
 
 from .convex import ConvexFit, fit_convex
 from .data import get_data, sanitize_column_names, view_data

@@ -1,5 +1,7 @@
 """Weighted rank aggregation across ranking methods."""
 
+import logging
+
 import numpy as np
 import pandas as pd
 
@@ -10,7 +12,35 @@ from scipy.stats import rankdata
 
 from .result import RankingResult, make_table
 
+logger = logging.getLogger(__name__)
+
 VOTE_METHODS: tuple[str, ...] = ("reciprocal_rank", "borda", "exponential")
+
+
+def _auto_weights(result: RankingResult | Mapping[str, pd.DataFrame]) -> dict[str, float]:
+    """Vote weights from probe skill: more predictive methods vote harder."""
+    if not isinstance(result, RankingResult):
+        raise ValueError(
+            "weights='auto' needs a RankingResult; a plain rankings mapping "
+            "carries no probe reports."
+        )
+    skills: dict[str, float] = {}
+    for method in result.methods:
+        report = result.diagnostics.get(method, {}).get("probe")
+        if report is None:
+            raise ValueError(
+                f"Method {method!r} has no probe report; rerun feature_ranking "
+                "with probe=True to use weights='auto'."
+            )
+        skills[method] = float(report["skill"])
+    if all(skill == 0.0 for skill in skills.values()):
+        logger.warning("Every method probed at chance level; using equal weights.")
+        return {method: 1.0 for method in skills}
+    logger.info(
+        "Auto vote weights from probe skill: %s.",
+        ", ".join(f"{method}={skill:.4f}" for method, skill in skills.items()),
+    )
+    return skills
 
 
 def _rank_points(ranks: np.ndarray, n_features: int, method: str) -> np.ndarray:
@@ -26,14 +56,16 @@ def _rank_points(ranks: np.ndarray, n_features: int, method: str) -> np.ndarray:
 
 def voting(
     result: RankingResult | Mapping[str, pd.DataFrame],
-    weights: Mapping[str, float] | None = None,
+    weights: Mapping[str, float] | Literal["auto"] | None = None,
     method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
 ) -> pd.DataFrame:
     """Aggregate per-method rankings into one table of weighted vote scores.
 
     Tied scores within a method receive their average rank before points are
     assigned, so exact ties contribute identically. Weights are keyed by method
-    name; missing keys default to 1.0 and unknown keys raise.
+    name; missing keys default to 1.0 and unknown keys raise. weights="auto"
+    weights each method by its probe skill from feature_ranking(probe=True),
+    so more predictive methods vote harder.
 
     Returns a table with columns ["feature", "score"], best first.
     """
@@ -43,6 +75,10 @@ def voting(
     if method not in VOTE_METHODS:
         raise ValueError(f"Unknown voting method {method!r}. Valid: {VOTE_METHODS}.")
 
+    if isinstance(weights, str):
+        if weights != "auto":
+            raise ValueError(f"Unknown weights {weights!r}; pass a mapping or 'auto'.")
+        weights = _auto_weights(result)
     weights = dict(weights) if weights is not None else {}
     unknown = set(weights) - set(rankings)
     if unknown:

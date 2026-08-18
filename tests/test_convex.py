@@ -159,8 +159,37 @@ def test_result_fit_convex_top_n_out_of_range(planted_regression):
     result = feature_ranking(X, y, task="regression", methods=["f_test"])
     with pytest.raises(ValueError, match="top_n"):
         result.fit_convex(X, y, top_n=0)
-    with pytest.raises(ValueError, match="top_n"):
-        result.fit_convex(X, y, top_n=99)
+
+
+def test_result_fit_convex_top_n_clamps_to_feature_count(planted_regression):
+    """A fixed NUM_KEEP above the feature count fits all features."""
+    X, y = planted_regression
+    result = feature_ranking(X, y, task="regression", methods=["f_test"])
+    fit = result.fit_convex(X, y, top_n=99)
+    assert len(fit.feature_names) == X.shape[1]
+
+
+def test_result_fit_convex_reports_method_metrics(planted_regression):
+    X, y = planted_regression
+    result = feature_ranking(X, y, task="regression", methods=["mi", "f_test"])
+    fit = result.fit_convex(X, y, top_n=2)
+    assert list(fit.method_metrics) == ["mi", "f_test", "ensemble"]
+    assert fit.method_metrics["ensemble"] == fit.metric_value
+    assert all(isinstance(value, float) for value in fit.method_metrics.values())
+
+
+def test_result_fit_convex_full_set_metrics_collapse(planted_regression):
+    """With top_n covering all features every selection is the same set."""
+    X, y = planted_regression
+    result = feature_ranking(X, y, task="regression", methods=["f_test"])
+    fit = result.fit_convex(X, y)
+    assert fit.method_metrics == {"f_test": fit.metric_value, "ensemble": fit.metric_value}
+
+
+def test_standalone_fit_convex_has_no_method_metrics(planted_regression):
+    X, y = planted_regression
+    fit = fit_convex(X, y, task="regression")
+    assert fit.method_metrics is None
 
 
 def test_result_fit_convex_mismatched_columns(planted_regression):

@@ -140,6 +140,39 @@ def test_get_data_n_rows_deterministic(messy_df):
     assert not X1.equals(X3)
 
 
+def test_get_data_drop_pattern():
+    df = pd.DataFrame({
+        "feat": [1.0, 2.0, 3.0, 4.0],
+        "target_a": [1.0, 2.0, 3.0, 4.0],
+        "target_b": [4.0, 3.0, 2.0, 1.0],
+        "label": [0, 1, 0, 1],
+    })
+    X, _ = get_data(df, target="label", columns_to_drop=["target_*"])
+    assert list(X.columns) == ["feat"]
+
+
+def test_get_data_drop_pattern_never_drops_target():
+    df = pd.DataFrame({
+        "feat": [1.0, 2.0, 3.0, 4.0],
+        "target_leak": [0.0, 1.0, 0.0, 1.0],
+        "target": [0, 1, 0, 1],
+    })
+    X, y = get_data(df, target="target", columns_to_drop=["target*"])
+    assert list(X.columns) == ["feat"]
+    assert len(y) == 4
+
+
+def test_get_data_drop_pattern_no_match(messy_df):
+    with pytest.raises(ValueError, match="matched no columns"):
+        get_data(messy_df, target="target", columns_to_drop=["nothing_*"])
+
+
+def test_get_data_drop_mixed_exact_and_pattern(messy_df):
+    X, _ = get_data(messy_df, target="target", columns_to_drop=["num_c", "cat_*"])
+    assert "num_c" not in X.columns
+    assert not any(column.startswith("cat_col") for column in X.columns)
+
+
 def test_get_data_missing_target(messy_df):
     with pytest.raises(ValueError, match="not found"):
         get_data(messy_df, target="nonexistent")

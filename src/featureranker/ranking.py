@@ -15,6 +15,7 @@ from sklearn.preprocessing import LabelEncoder
 
 from .lasso import LassoOptions, rank_lasso
 from .logistic import LogisticL1Options, rank_logistic_l1
+from .probe import probe_rankings
 from .result import RankingResult, make_table
 from .trees import TreeSearchOptions, rank_random_forest, rank_xgboost
 from .univariate import MutualInfoOptions, rank_f_test, rank_mutual_info
@@ -159,6 +160,7 @@ def feature_ranking(
     random_state: int = 42,
     dtype: Literal["float32", "float64"] = "float32",
     options: Mapping[str, object] | None = None,
+    probe: bool = True,
 ) -> RankingResult:
     """Rank features with an ensemble of methods and return a RankingResult.
 
@@ -168,6 +170,11 @@ def feature_ranking(
     core budget internally, which avoids nested-parallelism oversubscription.
     options maps a method key to an option dict or its options dataclass,
     for example options={"mi": {"max_samples": None}}.
+
+    With probe=True each finished ranking is evaluated by a cross-validated
+    linear probe over a ladder of top-k cuts; the per-method reports land in
+    diagnostics under "probe" (see result.probe_table()) and feed
+    voting(result, weights="auto").
     """
     if task not in ("classification", "regression"):
         raise ValueError(f"Unknown task {task!r}. Valid: 'classification', 'regression'.")
@@ -211,6 +218,15 @@ def feature_ranking(
         rankings[method] = make_table(feature_names, scores)
         diagnostics[method] = method_diagnostics
         logger.info("Method %s finished in %.2f s.", method, elapsed)
+
+    if probe:
+        started = time.perf_counter()
+        probe_reports = probe_rankings(
+            X_arr, y_arr, task, rankings, feature_names, budget, random_state
+        )
+        for method, report in probe_reports.items():
+            diagnostics[method]["probe"] = report
+        logger.info("Probe evaluation finished in %.2f s.", time.perf_counter() - started)
 
     from . import __version__
 

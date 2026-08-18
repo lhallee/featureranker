@@ -48,6 +48,10 @@ view_data(df)                        # missing-value report per column
 X, y = get_data(df, target="label")  # cleaned features and encoded target
 ```
 
+`columns_to_drop` takes exact names or glob patterns:
+`columns_to_drop=["id", "target_*"]` drops the `id` column and every
+`target_`-prefixed column (a pattern never drops the target itself).
+
 Categorical columns one-hot expand into named sub-features by default: a
 `color` column with values `blue` and `red` becomes `color-blue` and
 `color-red`, injected where `color` was, so the rankings speak in category
@@ -90,6 +94,7 @@ fit = result.fit_convex(X, y, top_n=10)   # combine the top 10 consensus feature
 
 fit.table()          # ["feature", "weight"], largest first
 fit.metric_value     # AUC (classification) or R2 (regression) on the fit data
+fit.method_metrics   # the same metric refit on each method's own top 10
 scores = fit.predict(X_new)  # rank new rows with the fitted combination
 ```
 
@@ -143,6 +148,20 @@ vote_table = voting(result, weights={"l1": 2.0, "mi": 0.5})
 
 Weights are keyed by method name; missing keys default to 1.0 and unknown
 keys raise `ValueError`.
+
+## Probe metrics and auto-tuned vote weights
+
+`feature_ranking` automatically evaluates every method's ranking with a
+shared cross-validated linear probe over top-k cuts (disable with
+`probe=False`). `result.probe_table()` reports the score per method and
+cut plus a normalized skill, and `weights="auto"` turns those skills into
+vote weights, so more predictive methods vote harder:
+
+```python
+result = feature_ranking(X, y)
+result.probe_table()                     # methods x top-k scores, skill
+vote_table = voting(result, weights="auto")
+```
 
 ## Tuning a method
 

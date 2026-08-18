@@ -76,12 +76,31 @@ class RankingResult:
             R, index=list(self.feature_names), columns=list(self.rankings)
         )
 
+    def probe_table(self) -> pd.DataFrame:
+        """Probe scores per method: one row per method, columns are the
+        top-k cuts plus the mean "score" and normalized "skill".
+
+        Requires the probe reports from feature_ranking(probe=True).
+        """
+        rows: dict[str, dict[object, float]] = {}
+        for method in self.methods:
+            report = self.diagnostics.get(method, {}).get("probe")
+            if report is None:
+                raise ValueError(
+                    f"Method {method!r} has no probe report; rerun "
+                    "feature_ranking with probe=True."
+                )
+            rows[method] = {
+                **report["by_k"], "score": report["score"], "skill": report["skill"],
+            }
+        return pd.DataFrame.from_dict(rows, orient="index")  # (m, ks + 2)
+
     def fit_convex(
         self,
         X: pd.DataFrame | np.ndarray,
         y: pd.Series | np.ndarray,
         top_n: int | None = None,
-        weights: Mapping[str, float] | None = None,
+        weights: Mapping[str, float] | Literal["auto"] | None = None,
         vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
         standardize: bool = True,
     ) -> "ConvexFit":

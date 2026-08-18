@@ -19,11 +19,19 @@ def feature_ranking(
     random_state: int = 42,
     dtype: Literal["float32", "float64"] = "float32",
     options: Mapping[str, Mapping[str, object] | object] | None = None,
+    probe: bool = True,
 ) -> RankingResult
 ```
 
 Runs the chosen methods sequentially over one shared numpy conversion of X
-and returns a [`RankingResult`](#featurerankerrankingresult).
+and returns a [`RankingResult`](#featurerankerrankingresult). With
+`probe=True` each finished ranking is then evaluated by a shared
+cross-validated linear probe (standardized logistic regression or ridge,
+3-fold, over top-k cuts 1, 2, 4, ... 64, on at most 10,000 seeded rows):
+the per-method reports land in `diagnostics[method]["probe"]` with the
+score at each cut, their mean, and a normalized skill in [0, 1], readable
+via [`probe_table`](#featurerankerrankingresult) and consumed by
+[`voting(weights="auto")`](#featurerankervoting).
 
 | parameter | meaning |
 |---|---|
@@ -88,6 +96,7 @@ entry thresholds, per-method wall seconds) and is excluded from `equals`.
 | `methods` | property; tuple of method keys in run order |
 | `score_matrix() -> pd.DataFrame` | features x methods raw scores, rows in `feature_names` order |
 | `rank_matrix() -> pd.DataFrame` | features x methods average ranks, 1 = best, ties share ranks |
+| `probe_table() -> pd.DataFrame` | probe scores per method and top-k cut plus mean score and skill; raises `ValueError` without probe reports |
 | `fit_convex(X, y, top_n=None, ...)` | fit a convex combination of the top consensus features, see [Convex combination](#featurerankerrankingresultfit_convex) |
 | `equals(other) -> bool` | exact equality of rankings and metadata, diagnostics excluded |
 | `save(path) -> None` | serialize with joblib |
@@ -98,7 +107,7 @@ entry thresholds, per-method wall seconds) and is excluded from `equals`.
 ```python
 def voting(
     result: RankingResult | Mapping[str, pd.DataFrame],
-    weights: Mapping[str, float] | None = None,
+    weights: Mapping[str, float] | Literal["auto"] | None = None,
     method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
 ) -> pd.DataFrame
 ```
@@ -107,6 +116,10 @@ Aggregates rankings into one `["feature", "score"]` table, best first.
 Accepts a `RankingResult` or any mapping of name to ranking table with the
 standard columns. Weights are keyed by method name; missing keys default to
 1.0, unknown keys raise `ValueError`, non-numeric weights raise `TypeError`.
+`weights="auto"` weights each method by its probe skill, so more predictive
+methods vote harder; it needs a `RankingResult` carrying the probe reports
+from `feature_ranking(probe=True)` and raises `ValueError` otherwise. When
+every method probes at chance level the weights fall back to equal.
 Formulas in [algorithms.md](algorithms.md#voting).
 
 ## Convex combination
@@ -135,7 +148,7 @@ def fit_convex(
     X: pd.DataFrame | np.ndarray,
     y: pd.Series | np.ndarray,
     top_n: int | None = None,
-    weights: Mapping[str, float] | None = None,
+    weights: Mapping[str, float] | Literal["auto"] | None = None,
     vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
     standardize: bool = True,
 ) -> ConvexFit
@@ -143,12 +156,16 @@ def fit_convex(
 
 Runs [`voting`](#featurerankervoting) with the given `weights` and
 `vote_method`, keeps the `top_n` consensus features (all when None), and
-fits the combination on those columns of X. X must carry the same features
-that produced the result (same DataFrame columns, or a numpy matrix of the
-same width), though the rows may differ, so the combination can be fit on
-held-out data. Raises `ValueError` when X does not match the ranked
-features, `top_n` is outside `[1, n_features]`, or the task is
-classification with more than 2 classes.
+fits the combination on those columns of X. Every ranking method's own
+top_n selection is also fitted and those metrics land in
+`method_metrics` beside the returned `"ensemble"` fit, so the consensus
+selection is directly comparable against each method's. X must carry the
+same features that produced the result (same DataFrame columns, or a numpy
+matrix of the same width), though the rows may differ, so the combination
+can be fit on held-out data. A `top_n` above the feature count clamps to
+all features. Raises `ValueError` when X does not match the ranked
+features, `top_n` is below 1, or the task is classification with more
+than 2 classes.
 
 ### featureranker.fit_convex
 
@@ -179,6 +196,7 @@ class ConvexFit:
     metric_name: str
     metric_value: float
     diagnostics: dict[str, object]
+    method_metrics: dict[str, float] | None = None
 ```
 
 `weights` aligns with `feature_names`, is nonnegative, and sums to one.
@@ -186,6 +204,9 @@ class ConvexFit:
 raw fit). `metric_name`/`metric_value` hold R2 for regression or ROC AUC
 for binary classification, computed on the fitting data. `diagnostics`
 carries solver internals (convergence, iterations, mean squared error).
+`method_metrics` is filled by `RankingResult.fit_convex`: the same metric
+refit on each ranking method's own top_n selection plus the returned
+`"ensemble"` fit; None for a standalone fit.
 
 | member | meaning |
 |---|---|
@@ -285,6 +306,9 @@ Cleans a raw frame in a fixed order: drop `columns_to_drop`, drop feature
 columns with less than `thresh` fraction of present values, drop rows with
 remaining missing values, optionally shuffle-sample `n_rows`, drop constant
 columns, then encode feature columns and a non-numeric target.
+`columns_to_drop` entries are exact names or glob patterns: `"target_*"`
+drops every matching column, a pattern never drops the target itself, and
+a pattern matching nothing raises to catch typos.
 
 Encoding rules: object/string/category feature columns one-hot expand into
 one 0/1 sub-feature per unique value in the data, named
@@ -297,10 +321,11 @@ previous behavior of label-encoding every categorical column. Booleans
 become single 0/1 columns, datetime and timedelta columns become int64
 nanoseconds, and a non-numeric target is label-encoded.
 
-Raises `ValueError` for a missing target, unknown drop columns, the target
-listed in `columns_to_drop`, `thresh` outside (0, 1], unknown `encoding`,
-`max_categories` below 2, `n_rows` beyond the cleaned length, or a
-sub-feature name colliding with an existing column.
+Raises `ValueError` for a missing target, unknown drop columns, a drop
+pattern matching no columns, the target listed in `columns_to_drop`,
+`thresh` outside (0, 1], unknown `encoding`, `max_categories` below 2,
+`n_rows` beyond the cleaned length, or a sub-feature name colliding with
+an existing column.
 
 ### featureranker.view_data
 
@@ -342,8 +367,9 @@ def get_hf_data(
 
 Downloads one split of a Hub dataset and returns `(features, target)` ready
 for [`feature_ranking`](#featurerankerfeature_ranking). `target` names the
-label column, `columns_to_drop` excludes columns such as ids or free text,
-and every remaining column becomes a feature. The frame goes through
+label column, `columns_to_drop` excludes columns such as ids or free text
+(exact names or glob patterns like `"target_*"`), and every remaining
+column becomes a feature. The frame goes through
 [`get_data`](#featurerankerget_data), so cleaning, sampling, and categorical
 encoding behave exactly as documented there; `load_kwargs` pass through to
 `datasets.load_dataset` (revision, data_files, token, ...).
