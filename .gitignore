@@ -20,3 +20,4 @@ CHANGELOG.md
 !docs/images/*.png
 artifacts/
 local_usage.ipynb
+exp.py
