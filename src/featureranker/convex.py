@@ -1,6 +1,7 @@
 """Optimal convex combination of features: weights >= 0 that sum to one."""
 
 import logging
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -93,16 +94,21 @@ def _column_scales(X: np.ndarray) -> np.ndarray:
 
 
 def _solve_simplex_least_squares(
-    X: np.ndarray, y: np.ndarray
+    X: np.ndarray, y: np.ndarray, gamma: float
 ) -> tuple[np.ndarray, dict[str, object]]:
     """Minimize mean squared error of X @ w against y over the simplex.
 
-    The problem is a convex quadratic program, so the solution from the
-    uniform start is the global optimum and the fit is deterministic.
-    Solving in the substituted variables v = w * scales keeps the Hessian
-    well conditioned when column scales differ by orders of magnitude,
-    which otherwise stalls SLSQP at the start; the constraint set is still
-    the raw simplex, so the returned weights solve the original problem.
+    With gamma=0 the problem is a convex quadratic program whose optimum
+    may sit on the simplex boundary, so redundant features get exact zero
+    weights. With gamma > 0 a maximum-entropy term gamma * sum(w * log w)
+    is added: the objective becomes strictly convex and the entropy
+    gradient diverges at the boundary, so the optimum is unique and every
+    weight is strictly positive. Either way the fit from the uniform start
+    is deterministic. Solving in the substituted variables v = w * scales
+    keeps the Hessian well conditioned when column scales differ by orders
+    of magnitude, which otherwise stalls SLSQP at the start; the
+    constraint set is still the raw simplex, so the returned weights solve
+    the original problem.
     """
     # X: (n, k); y: (n,)
     n, k = X.shape
@@ -110,40 +116,55 @@ def _solve_simplex_least_squares(
     A = X / scales  # (n, k)
     inv_scales = 1.0 / scales  # (k,)
     v0 = scales / k  # (k,), the uniform w0 = 1/k in substituted variables
+    floor = 1e-12 if gamma > 0.0 else 0.0
 
     def objective(v: np.ndarray) -> float:
         residual = A @ v - y  # (n,)
-        return 0.5 * float(residual @ residual) / n
+        value = 0.5 * float(residual @ residual) / n
+        if gamma > 0.0:
+            w = v * inv_scales  # (k,)
+            value += gamma * float(np.sum(w * np.log(w)))
+        return value
 
     def gradient(v: np.ndarray) -> np.ndarray:
         residual = A @ v - y  # (n,)
-        return A.T @ residual / n  # (k,)
+        grad = A.T @ residual / n  # (k,)
+        if gamma > 0.0:
+            w = v * inv_scales  # (k,)
+            grad = grad + gamma * inv_scales * (np.log(w) + 1.0)  # (k,)
+        return grad
 
-    solution = minimize(
-        objective,
-        v0,
-        jac=gradient,
-        method="SLSQP",
-        bounds=[(0.0, scale) for scale in scales],
-        constraints=[{
-            "type": "eq",
-            "fun": lambda v: float(v @ inv_scales) - 1.0,
-            "jac": lambda v: inv_scales,
-        }],
-        options={"maxiter": 1000, "ftol": 1e-12},
-    )
+    with warnings.catch_warnings():
+        # SLSQP line searches step slightly outside the bounds and scipy
+        # clips them with a RuntimeWarning; expected here, not actionable
+        warnings.filterwarnings("ignore", message="Values in x were outside bounds")
+        solution = minimize(
+            objective,
+            v0,
+            jac=gradient,
+            method="SLSQP",
+            bounds=[(floor * scale, scale) for scale in scales],
+            constraints=[{
+                "type": "eq",
+                "fun": lambda v: float(v @ inv_scales) - 1.0,
+                "jac": lambda v: inv_scales,
+            }],
+            options={"maxiter": 1000, "ftol": 1e-12},
+        )
     if not solution.success:
         logger.warning("Simplex solver stopped early: %s", solution.message)
 
     # map back to w and clean up round-off so the constraint holds exactly;
-    # weights below 1e-12 on a simplex are numerically zero
-    weights = np.clip(solution.x / scales, 0.0, None)  # (k,)
-    weights[weights < 1e-12] = 0.0
+    # without entropy, weights below 1e-12 on a simplex are numerically zero
+    weights = np.clip(solution.x / scales, floor, None)  # (k,)
+    if gamma == 0.0:
+        weights[weights < 1e-12] = 0.0
     weights = weights / weights.sum()
     diagnostics: dict[str, object] = {
         "converged": bool(solution.success),
         "iterations": int(solution.nit),
         "mse": float(np.mean((X @ weights - y) ** 2)),
+        "entropy_weight": gamma,
     }
     return weights, diagnostics
 
@@ -154,6 +175,7 @@ def _fit(
     feature_names: tuple[str, ...],
     task: str,
     standardize: bool,
+    entropy: float,
 ) -> ConvexFit:
     """Solve the simplex fit and package it with its fitting-data metric."""
     # X: (n, k); y: (n,)
@@ -165,7 +187,10 @@ def _fit(
         feature_means = feature_stds = None
         X_fit = X  # (n, k)
 
-    weights, diagnostics = _solve_simplex_least_squares(X_fit, y)
+    # scaling by the target variance makes the smoothing strength invariant
+    # to the units of y
+    gamma = entropy * float(y.var())
+    weights, diagnostics = _solve_simplex_least_squares(X_fit, y, gamma)
     scores = X_fit @ weights  # (n,)
     if task == "classification":
         metric_name, metric_value = "auc", float(roc_auc_score(y, scores))
@@ -201,6 +226,7 @@ def fit_convex(
     y: pd.Series | np.ndarray,
     task: Literal["classification", "regression"] = "classification",
     standardize: bool = True,
+    entropy: float = 0.1,
 ) -> ConvexFit:
     """Fit the optimal convex combination of every column of X against y.
 
@@ -212,15 +238,23 @@ def fit_convex(
     setting when features carry different units or scales. Pass
     standardize=False when the features are already commensurate (for
     example sub-scores of a ranking scheme) and the score should be the
-    weighted average of the raw values. To combine only the strongest
-    features from a ranking run, call RankingResult.fit_convex with top_n
-    instead.
+    weighted average of the raw values.
+
+    entropy sets the maximum-entropy smoothing strength: the default keeps
+    every weight strictly positive, because the entropy gradient diverges
+    at the simplex boundary, and makes the optimum unique even when
+    features duplicate each other. entropy=0 recovers the plain least
+    squares fit, where redundant features get exact zero weights. To
+    combine only the strongest features from a ranking run, call
+    RankingResult.fit_convex with top_n instead.
     """
     if task not in ("classification", "regression"):
         raise ValueError(f"Unknown task {task!r}. Valid: 'classification', 'regression'.")
+    if entropy < 0.0:
+        raise ValueError(f"entropy must be >= 0, got {entropy}.")
     X_arr, feature_names = _convert_features(X, "float64")  # (n, k)
     y_arr = _binary_target(y, task, X_arr.shape[0])  # (n,)
-    fit = _fit(X_arr, y_arr, feature_names, task, standardize)
+    fit = _fit(X_arr, y_arr, feature_names, task, standardize, entropy)
     logger.info(
         "Convex fit over %d features: %s=%.4f.",
         len(feature_names), fit.metric_name, fit.metric_value,
@@ -236,6 +270,7 @@ def fit_convex_from_result(
     weights: Mapping[str, float] | Literal["auto"] | None = None,
     vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
     standardize: bool = True,
+    entropy: float = 0.1,
 ) -> ConvexFit:
     """Fit a convex combination of the top consensus features of a ranking.
 
@@ -244,8 +279,10 @@ def fit_convex_from_result(
     method's own top_n selection is also fitted, and those metrics land in
     method_metrics beside the returned "ensemble" fit. X must carry the
     same features that produced the ranking result, though the rows may
-    differ. standardize behaves as in fit_convex.
+    differ. standardize and entropy behave as in fit_convex.
     """
+    if entropy < 0.0:
+        raise ValueError(f"entropy must be >= 0, got {entropy}.")
     X_arr, feature_names = _convert_features(X, "float64")  # (n, p)
     if feature_names != result.feature_names:
         raise ValueError(
@@ -270,7 +307,7 @@ def fit_convex_from_result(
 
     def fit_selection(selected: tuple[str, ...]) -> ConvexFit:
         X_sel = X_arr[:, [column_index[name] for name in selected]]  # (n, top_n)
-        return _fit(X_sel, y_arr, selected, result.task, standardize)
+        return _fit(X_sel, y_arr, selected, result.task, standardize, entropy)
 
     ensemble = fit_selection(tuple(consensus["feature"].head(top_n)))
     if top_n == result.n_features:

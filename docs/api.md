@@ -140,6 +140,16 @@ features are already commensurate (sub-scores of a ranking scheme, model
 outputs on a shared scale) and the score should be the weighted average of
 the raw values.
 
+`entropy` (default 0.1) adds a maximum-entropy term
+`entropy * Var(y) * sum(w * log w)` to the objective. The entropy gradient
+diverges at the simplex boundary, so the optimum is strictly interior:
+every weight stays strictly positive, and the fit is unique even when
+features duplicate each other (a plain least-squares fit is ill-posed
+there and an entropy fit splits the weight symmetrically). Scaling by
+`Var(y)` makes the strength invariant to the units of the target.
+`entropy=0` recovers plain least squares, where redundant features get
+exact zero weights.
+
 ### featureranker.RankingResult.fit_convex
 
 ```python
@@ -151,6 +161,7 @@ def fit_convex(
     weights: Mapping[str, float] | Literal["auto"] | None = None,
     vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
     standardize: bool = True,
+    entropy: float = 0.1,
 ) -> ConvexFit
 ```
 
@@ -164,8 +175,8 @@ same features that produced the result (same DataFrame columns, or a numpy
 matrix of the same width), though the rows may differ, so the combination
 can be fit on held-out data. A `top_n` above the feature count clamps to
 all features. Raises `ValueError` when X does not match the ranked
-features, `top_n` is below 1, or the task is classification with more
-than 2 classes.
+features, `top_n` is below 1, `entropy` is negative, or the task is
+classification with more than 2 classes.
 
 ### featureranker.fit_convex
 
@@ -175,6 +186,7 @@ def fit_convex(
     y: pd.Series | np.ndarray,
     task: Literal["classification", "regression"] = "classification",
     standardize: bool = True,
+    entropy: float = 0.1,
 ) -> ConvexFit
 ```
 

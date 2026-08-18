@@ -98,11 +98,15 @@ fit.method_metrics   # the same metric refit on each method's own top 10
 scores = fit.predict(X_new)  # rank new rows with the fitted combination
 ```
 
-The fit is deterministic and globally optimal (a convex quadratic program).
+The fit is deterministic and globally optimal.
 Classification must be binary; the score ranks rows by class membership.
 Features are z-scored internally by default so mixed scales cannot dominate
 the fit; pass `standardize=False` when your features already share a scale
-and the score should be the weighted average of the raw values.
+and the score should be the weighted average of the raw values. A
+maximum-entropy term (`entropy`, default 0.1) keeps every weight strictly
+positive and the optimum unique even for duplicated features;
+`entropy=0` recovers plain least squares, where redundant features get
+exact zero weights.
 
 ## Regression
 

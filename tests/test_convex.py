@@ -23,9 +23,9 @@ def planted_regression():
 
 
 def test_fit_convex_raw_recovers_planted_weights(planted_regression):
-    """standardize=False fits the raw features, so recovery is exact."""
+    """standardize=False and entropy=0 fit the raw problem, so recovery is exact."""
     X, y = planted_regression
-    fit = fit_convex(X, y, task="regression", standardize=False)
+    fit = fit_convex(X, y, task="regression", standardize=False, entropy=0.0)
     weight_of = dict(zip(fit.feature_names, fit.weights))
     assert weight_of["a"] == pytest.approx(0.7, abs=0.02)
     assert weight_of["b"] == pytest.approx(0.3, abs=0.02)
@@ -38,11 +38,49 @@ def test_fit_convex_standardize_handles_mixed_scales(planted_regression):
     """The default z-scoring keeps huge-scale columns from drowning the fit."""
     X, y = planted_regression
     rescaled = X.assign(a=X["a"] * 10_000.0)
-    fit = fit_convex(rescaled, y, task="regression")
+    fit = fit_convex(rescaled, y, task="regression", entropy=0.0)
     weight_of = dict(zip(fit.feature_names, fit.weights))
     assert weight_of["a"] == pytest.approx(0.7, abs=0.05)
     assert weight_of["b"] == pytest.approx(0.3, abs=0.05)
     assert fit.metric_value > 0.98
+
+
+def test_fit_convex_default_strictly_positive(planted_regression):
+    """The default entropy smoothing keeps every weight strictly positive."""
+    X, y = planted_regression
+    fit = fit_convex(X, y, task="regression")
+    assert (fit.weights > 0.0).all()
+    assert fit.metric_value > 0.95
+    weight_of = dict(zip(fit.feature_names, fit.weights))
+    assert weight_of["a"] > weight_of["c"]
+    assert weight_of["b"] > weight_of["d"]
+
+
+def test_fit_convex_entropy_zero_allows_exact_zeros(planted_regression):
+    """Plain least squares parks noise features exactly on the boundary."""
+    X, y = planted_regression
+    fit = fit_convex(X, y, task="regression", standardize=False, entropy=0.0)
+    assert (fit.weights == 0.0).any()
+
+
+def test_fit_convex_entropy_resolves_duplicate_features():
+    """Duplicated columns make plain least squares ill-posed; entropy picks
+    the symmetric solution."""
+    rng = np.random.default_rng(1)
+    n = 300
+    a = rng.normal(size=n)
+    X = pd.DataFrame({"a": a, "a_copy": a, "noise": rng.normal(size=n)})
+    y = pd.Series(a, name="target")
+    fit = fit_convex(X, y, task="regression")
+    weight_of = dict(zip(fit.feature_names, fit.weights))
+    assert weight_of["a"] == pytest.approx(weight_of["a_copy"], abs=1e-6)
+    assert weight_of["noise"] < weight_of["a"]
+
+
+def test_fit_convex_negative_entropy_raises(planted_regression):
+    X, y = planted_regression
+    with pytest.raises(ValueError, match="entropy"):
+        fit_convex(X, y, task="regression", entropy=-0.1)
 
 
 def test_fit_convex_weights_on_simplex(planted_regression):
@@ -131,7 +169,7 @@ def test_table_sorted_by_weight(planted_regression):
 def test_result_fit_convex_top_n(planted_regression):
     X, y = planted_regression
     result = feature_ranking(X, y, task="regression", methods=["f_test"])
-    fit = result.fit_convex(X, y, top_n=2, standardize=False)
+    fit = result.fit_convex(X, y, top_n=2, standardize=False, entropy=0.0)
     assert set(fit.feature_names) == {"a", "b"}
     weight_of = dict(zip(fit.feature_names, fit.weights))
     assert weight_of["a"] == pytest.approx(0.7, abs=0.02)

@@ -103,6 +103,7 @@ class RankingResult:
         weights: Mapping[str, float] | Literal["auto"] | None = None,
         vote_method: Literal["reciprocal_rank", "borda", "exponential"] = "reciprocal_rank",
         standardize: bool = True,
+        entropy: float = 0.1,
     ) -> "ConvexFit":
         """Fit the optimal convex combination of the top consensus features.
 
@@ -112,14 +113,16 @@ class RankingResult:
         produced this result. standardize=True z-scores features first, so
         the weights are unit-free shares; pass False when the features are
         already commensurate and the score should be the weighted average of
-        the raw values. See convex.fit_convex_from_result.
+        the raw values. entropy sets the maximum-entropy smoothing that
+        keeps every weight strictly positive; entropy=0 allows exact zeros.
+        See convex.fit_convex_from_result.
         """
         # deferred import: convex depends on vote, which depends on this module
         from .convex import fit_convex_from_result
 
         return fit_convex_from_result(
-            self, X, y, top_n=top_n, weights=weights,
-            vote_method=vote_method, standardize=standardize,
+            self, X, y, top_n=top_n, weights=weights, vote_method=vote_method,
+            standardize=standardize, entropy=entropy,
         )
 
     def equals(self, other: "RankingResult") -> bool:
